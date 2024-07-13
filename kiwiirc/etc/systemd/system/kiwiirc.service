@@ -1,0 +1,17 @@
+[Unit]
+Description=Kiwi IRC Web IRC Gateway
+After=network.target
+
+[Service]
+User=kiwiirc
+Group=kiwiirc
+RuntimeDirectory=kiwiirc
+WorkingDirectory=/usr/share/kiwiirc/
+ExecStart=/usr/bin/kiwiirc --config=/etc/kiwiirc/config.conf
+ExecReload=/usr/bin/kill -HUP $MAINPID
+KillMode=process
+RestartSec=10s
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
