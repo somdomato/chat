@@ -25,9 +25,9 @@ rsync -avzz gamja$GAMJA_PATH/ root@eris:$GAMJA_PATH/ --exclude="node_modules/" -
 scp ergo/etc/letsencrypt/renewal-hooks/deploy/install-ergo-certificates root@eris:/etc/letsencrypt/renewal-hooks/deploy/
 
 # Nginx
-scp kiwiirc/etc/nginx/sites-available/06-chat.somdomato.com root@eris:/etc/nginx/sites-available/
-scp ergo/etc/nginx/sites-available/05-irc.somdomato.com root@eris:/etc/nginx/sites-available/
-scp gamja/etc/nginx/sites-available/07-gamja.somdomato.com root@eris:/etc/nginx/sites-available/
+scp kiwiirc/etc/nginx/sites.d/06-chat.somdomato.com root@eris:/etc/nginx/sites.d/
+scp ergo/etc/nginx/sites.d/05-irc.somdomato.com root@eris:/etc/nginx/sites.d/
+scp gamja/etc/nginx/sites.d/07-gamja.somdomato.com root@eris:/etc/nginx/sites.d/
 
 # ssh root@eris "chown -R ergo:ergo $ERGO_PATH && chown -R kiwiirc:kiwiirc $KIWI_PATH"
 ssh root@eris "systemctl restart ergo kiwiirc nginx"
