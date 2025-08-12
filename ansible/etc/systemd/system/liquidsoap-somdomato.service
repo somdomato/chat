@@ -1,0 +1,15 @@
+[Unit]
+Description=Liquidsoap daemon (SDM)
+After=network.target icecast2-somdomato.service
+Documentation=http://liquidsoap.fm
+
+[Service]
+Type=simple
+User=liquidsoap
+PIDFile=/run/liquidsoap.pid
+ExecStart=/usr/bin/liquidsoap /etc/liquidsoap/sdm/somdomato.liq
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

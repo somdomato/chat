@@ -1,0 +1,79 @@
+---
+- name: Preparar o ambiente para o Icecast e LiquidSoap
+  hosts: all
+  become: true
+  remote_user: root
+
+  tasks:
+    - name: Garante que o grupo "ergo" exista
+      ansible.builtin.group:
+        name: ergo
+        state: present
+
+    - name: Adicionar o usuário e grupo "ergo"
+      ansible.builtin.user:
+        name: ergo
+        group: ergo
+
+    # Icecast
+    - name: Alterar as configurações do Icecast
+      ansible.builtin.copy:
+        src: etc/icecast2/somdomato.xml
+        dest: /etc/icecast2/somdomato.xml
+        owner: icecast2
+        group: icecast2
+        mode: '0644'
+
+    - name: Alterar as configurações do LiquidSoap
+      ansible.builtin.copy:
+        src: "etc/liquidsoap/sdm/{{ item }}"
+        dest: "/etc/liquidsoap/sdm/{{ item }}"
+        owner: liquidsoap
+        group: liquidsoap
+        mode: '0644'
+      with_items:
+        - "somdomato.liq"
+        - "settings.liq"
+        - "outputs.ogg.liq"
+        - "outputs.mp3.liq"
+
+    # Nginx
+    - name: Copiar os arquivos de configuração dos sites do Nginx
+      ansible.builtin.copy:
+        src: "etc/nginx/sites.d/20-radio.somdomato.com"
+        dest: "/etc/nginx/sites.d/20-radio.somdomato.com"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copiar os arquivos de configuração do Nginx
+      ansible.builtin.copy:
+        src: "etc/nginx/conf.d/{{ item }}"
+        dest: "/etc/nginx/conf.d/{{ item }}"
+        owner: root
+        group: root
+        mode: '0644'
+      with_items:
+        - "no-cache.conf"
+
+    # Systemd
+    - name: Alterar as unidades do systemd
+      ansible.builtin.copy:
+        src: "etc/systemd/system/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      with_items:
+        - "icecast2-somdomato.service"
+        - "liquidsoap-somdomato.service"
+
+    - name: Reiniciar as unidades do systemd
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: restarted
+        enabled: true
+        daemon_reload: true
+      with_items:
+        - "somdomato-ergo.service"
+        - "nginx.service"
