@@ -11,8 +11,8 @@ After=network.target
 [Service]
 Type=notify
 User=ergo
-WorkingDirectory=/home/ergo
-ExecStart=/home/ergo/ergo run --conf /home/ergo/ircd.yaml
+WorkingDirectory=/usr/share/ergo
+ExecStart=/usr/share/ergo/ergo run --conf /usr/share/ergo/ircd.yaml
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 LimitNOFILE=1048576
