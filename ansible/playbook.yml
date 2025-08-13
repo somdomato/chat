@@ -3,6 +3,8 @@
   hosts: all
   become: true
   remote_user: root
+  vars:
+    refresh: true
 
   tasks:
     - name: Garante que o grupo "ergo" exista
@@ -10,38 +12,117 @@
         name: ergo
         state: present
 
-    - name: Adicionar o usuário e grupo "ergo"
+    - name: Adicionar o usuário "ergo" ao grupo
       ansible.builtin.user:
         name: ergo
         group: ergo
+        create_home: false  # Adicionado para evitar criação de home desnecessária
+        system: true        # Define como usuário de sistema
 
-    # Nginx
-    - name: Copiar os arquivos de configuração dos sites do Nginx
+    - name: Copiar certificados do Let's Encrypt
+      ansible.builtin.copy:
+        src: "etc/letsencrypt/renewal-hooks/deploy/install-ergo-certificates"
+        dest: "/etc/letsencrypt/renewal-hooks/deploy/install-ergo-certificates"
+        owner: root
+        group: root
+        mode: "0755"
+
+    # - name: Delete content & directory
+    #   ansible.builtin.file:
+    #     state: absent
+    #     path: "/usr/share/{{ item }}"
+    #   loop:
+    #     - ergo
+    #     - gamja
+    #     - kiwiirc
+    #   when: refresh == true
+
+    - name: Synchronize and delete files in dest on the remote host that are not found in src of localhost.
+      ansible.posix.synchronize:
+        src: "usr/share/{{ item }}/"
+        dest: "/usr/share/{{ item }}/"
+        delete: false
+        recursive: true
+        rsync_opts:
+          - "--no-motd"
+          - "--exclude=.git "
+          - "--exclude=node_modules"
+          - "-e 'ssh -p 2200'"
+      loop: 
+        - ergo
+        - gamja
+        - kiwiirc
+      when: refresh == true
+
+    - name: Copiar os certificados do Ergo
+      ansible.builtin.shell: |
+        cp /etc/letsencrypt/live/irc.somdomato.com/fullchain.pem /usr/share/ergo
+        cp /etc/letsencrypt/live/irc.somdomato.com/privkey.pem /usr/share/ergo
+        chown ergo:nginx /usr/share/ergo/*.pem
+        chmod 640 /usr/share/ergo/*.pem
+
+    - name: Run npm install in a specific directory
+      command: |
+        npm install --include=dev
+        npm run build
+      args:
+        chdir: /usr/share/gamja
+
+    - name: Change ownership of a gamja & kiwiirc directory recursively
+      ansible.builtin.file:
+        path: "/usr/share/{{ item }}"
+        owner: nginx
+        group: nginx
+        recurse: yes # Crucial for recursive ownership changes within a directory
+        state: directory # Ensures it's treated as a directory
+      loop: 
+        - gamja
+        - kiwiirc
+
+    - name: Change ownership of ergo directory recursively
+      ansible.builtin.file:
+        path: /usr/share/ergo
+        owner: ergo
+        group: ergo
+        recurse: yes 
+        state: directory
+
+    - name: Copiar configurações do Nginx
       ansible.builtin.copy:
         src: "etc/nginx/sites.d/{{ item }}"
         dest: "/etc/nginx/sites.d/{{ item }}"
         owner: root
         group: root
         mode: '0644'
-      with_items:
-        - "51-irc.somdomato.com.conf"
+      loop:
+        - "50-irc.somdomato.com.conf"
         - "51-gamja.somdomato.com.conf"
+        - "52-chat.somdomato.com.conf"
+      notify: Reiniciar Nginx  # Usando handler para reinício condicional
 
-    # Systemd
-    - name: Alterar as unidades do systemd
+    - name: Copiar serviço systemd do Ergo
       ansible.builtin.copy:
         src: "etc/systemd/system/somdomato-ergo.service"
         dest: "/etc/systemd/system/somdomato-ergo.service"
         owner: root
         group: root
         mode: "0644"
+      notify: Recarregar systemd  # Aciona recarregamento se o arquivo mudar
 
-    - name: Reiniciar as unidades do systemd
+  handlers:
+    - name: Recarregar systemd
       ansible.builtin.systemd:
-        name: "{{ item }}"
+        daemon_reload: true
+
+    - name: Reiniciar serviço Ergo
+      ansible.builtin.systemd:
+        name: somdomato-ergo.service
         state: restarted
         enabled: true
-        daemon_reload: true
-      with_items:
-        - "somdomato-ergo.service"
-        - "nginx.service"
+      listen: "Reiniciar serviços"  # Handler combinado
+
+    - name: Reiniciar Nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+      listen: "Reiniciar serviços"

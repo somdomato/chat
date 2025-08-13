@@ -71,6 +71,9 @@ server:
         #     tor: true
 
         # Example of a WebSocket listener:
+        ":8067":
+            websocket: true
+
         ":8097":
             websocket: true
             tls:
