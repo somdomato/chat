@@ -1,6 +1,8 @@
 {
 	"server": {
 		"url": "wss://irc.somdomato.com/webirc",
+		"autoconnect": true,
+		"nick": "{sdm_*}",
 		"autojoin": "#somdomato"
 	}
 }

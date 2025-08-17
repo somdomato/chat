@@ -11,7 +11,7 @@
         { "name": "SDM-Dark", "url": "static/themes/sdm-dark" }
     ],
     "startupOptions" : {
-        "websocket": "wss://chat.somdomato.com/webirc",
+        "websocket": "wss://irc.somdomato.com/webirc",
         "channel": "#somdomato",
         "nick": "{sdm_?}"
     }
