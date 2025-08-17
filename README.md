@@ -1,6 +1,6 @@
 # 🎧 Rádio Som do Mato (CHAT)
 
-![Rádio Som do Mato](https://raw.githubusercontent.com/somdomato/somdomato/main/public/images/logo.svg "Rádio Som do Mato")
+![Rádio Som do Mato](https://raw.githubusercontent.com/somdomato/somdomato/refs/heads/main/public/images/logo.svg "Rádio Som do Mato")
 
 Streaming de audio para as massas.
 
