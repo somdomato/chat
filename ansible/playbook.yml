@@ -27,16 +27,6 @@
         group: root
         mode: "0755"
 
-    # - name: Delete content & directory
-    #   ansible.builtin.file:
-    #     state: absent
-    #     path: "/usr/share/{{ item }}"
-    #   loop:
-    #     - ergo
-    #     - gamja
-    #     - kiwiirc
-    #   when: refresh == true
-
     - name: Synchronize and delete files in dest on the remote host that are not found in src of localhost.
       ansible.posix.synchronize:
         src: "usr/share/{{ item }}/"
@@ -102,24 +92,29 @@
 
     - name: Copiar serviço systemd do Ergo
       ansible.builtin.copy:
-        src: "etc/systemd/system/somdomato-ergo.service"
-        dest: "/etc/systemd/system/somdomato-ergo.service"
+        src: "etc/systemd/system/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
         owner: root
         group: root
         mode: "0644"
-      notify: Recarregar systemd  # Aciona recarregamento se o arquivo mudar
+      notify: Reiniciar serviços  # Aciona recarregamento se o arquivo mudar
+      loop:
+        - "somdomato-ergo.service"
+        - "somdomato-kiwiirc.service"
+
 
   handlers:
-    - name: Recarregar systemd
-      ansible.builtin.systemd:
-        daemon_reload: true
-
     - name: Reiniciar serviço Ergo
       ansible.builtin.systemd:
-        name: somdomato-ergo.service
+        name: "{{ item }}"
         state: restarted
         enabled: true
-      listen: "Reiniciar serviços"  # Handler combinado
+        daemon_reload: true
+      listen: "Reiniciar serviços"
+      loop:
+        - "somdomato-ergo.service"  
+        - "somdomato-kiwiirc.service"  # Handler combinado
+
 
     - name: Reiniciar Nginx
       ansible.builtin.systemd:
