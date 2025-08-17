@@ -84,6 +84,7 @@
         owner: root
         group: root
         mode: '0644'
+        force: true
       loop:
         - "50-irc.somdomato.com.conf"
         - "51-gamja.somdomato.com.conf"
