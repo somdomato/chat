@@ -59,6 +59,12 @@
         chdir: /usr/share/gamja
 
     - name: Change ownership of a gamja & kiwiirc directory recursively
+      ansible.builtin.copy:
+        src: "etc/kiwiirc/client.json"
+        dest: "/etc/kiwiirc/client.json"
+        force: true
+
+    - name: Copy kiwiirc client config file
       ansible.builtin.file:
         path: "/usr/share/{{ item }}"
         owner: nginx
