@@ -1,86 +1,414 @@
 ---
+
 - name: Preparar o ambiente para o Ergo e Gamja
   hosts: all
   become: true
-  remote_user: root
-  vars:
-    refresh: true
+  remote_user: "{{ ansible_user }}"
+  vars_files:
+    - group_vars/vault.yml
 
   tasks:
-    - name: Garante que o grupo "ergo" exista
-      ansible.builtin.group:
-        name: ergo
+    - name: Atualizar cache de pacotes
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Corrigir pacotes quebrados se houver
+      ansible.builtin.command: apt-get -f install -y
+      register: fix_broken
+      failed_when: fix_broken.rc not in [0, 100]
+      changed_when: fix_broken.rc == 0
+
+    - name: Verificar se Node.js já está instalado
+      ansible.builtin.command: node --version
+      register: nodejs_check
+      failed_when: false
+      changed_when: false
+
+    - name: Verificar se npm já está instalado
+      ansible.builtin.command: npm --version
+      register: npm_check
+      failed_when: false
+      changed_when: false
+
+    - name: Mostrar status atual do Node.js/npm
+      ansible.builtin.debug:
+        msg:
+          - "Node.js instalado: {{ 'Sim' if nodejs_check.rc == 0 else 'Não' }}"
+          - "npm instalado: {{ 'Sim' if npm_check.rc == 0 else 'Não' }}"
+          - "Versão Node.js: {{ nodejs_check.stdout if nodejs_check.rc == 0 else 'N/A' }}"
+          - "Versão npm: {{ npm_check.stdout if npm_check.rc == 0 else 'N/A' }}"
+
+    - name: Pular instalação do Node.js se já estiver funcionando
+      ansible.builtin.debug:
+        msg: "Node.js e npm já estão instalados e funcionando. Pulando instalação."
+      when: nodejs_check.rc == 0 and npm_check.rc == 0
+
+    - name: Remover pacotes npm/nodejs conflitantes do sistema (apenas se necessário)
+      ansible.builtin.package:
+        name:
+          - npm
+          - nodejs
+        state: absent
+      register: remove_packages_result
+      failed_when: remove_packages_result.rc != 0 and "No packages found" not in remove_packages_result.stderr
+      when: nodejs_check.rc != 0 or npm_check.rc != 0
+
+    - name: Executar autoremove para limpar dependências órfãs
+      ansible.builtin.apt:
+        autoremove: true
+        autoclean: true
+
+    - name: Instalar dependências básicas
+      ansible.builtin.package:
+        name:
+          - curl
+          - gnupg
+          - ca-certificates
+          - apt-transport-https
+          - software-properties-common
         state: present
 
-    - name: Adicionar o usuário "ergo" ao grupo
+    - name: Instalar certbot e plugin cloudflare
+      ansible.builtin.package:
+        name:
+          - certbot
+          - python3-certbot-dns-cloudflare
+        state: present
+
+    - name: Verificar versão do módulo cloudflare instalado
+      ansible.builtin.shell: python3 -c "import cloudflare; print(cloudflare.__version__)"
+      register: cloudflare_version
+      failed_when: false
+      changed_when: false
+
+    - name: Mostrar versão do módulo cloudflare
+      ansible.builtin.debug:
+        msg: "Módulo cloudflare versão: {{ cloudflare_version.stdout if cloudflare_version.rc == 0 else 'Erro ao verificar' }}"
+
+    - name: Instalar nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+
+    - name: Baixar e adicionar chave GPG do NodeSource (método moderno)
+      ansible.builtin.get_url:
+        url: https://deb.nodesource.com/gpgkey/nodesource.gpg.key
+        dest: /tmp/nodesource.gpg.key
+        mode: '0644'
+      when: nodejs_check.rc != 0 or npm_check.rc != 0
+
+    - name: Adicionar chave GPG do NodeSource ao keyring
+      ansible.builtin.shell: |
+        gpg --dearmor < /tmp/nodesource.gpg.key > /usr/share/keyrings/nodesource.gpg
+        chmod 644 /usr/share/keyrings/nodesource.gpg
+      args:
+        creates: /usr/share/keyrings/nodesource.gpg
+      when: nodejs_check.rc != 0 or npm_check.rc != 0
+
+    - name: Adicionar repositório NodeSource para Node.js 24.x
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x {{ ansible_distribution_release }} main"
+        state: present
+      when: nodejs_check.rc != 0 or npm_check.rc != 0
+
+    - name: Atualizar cache após adicionar repositório NodeSource
+      ansible.builtin.apt:
+        update_cache: true
+      when: nodejs_check.rc != 0 or npm_check.rc != 0
+
+    - name: Instalar Node.js via NodeSource
+      ansible.builtin.package:
+        name: nodejs
+        state: present
+      register: nodejs_install
+      ignore_errors: true
+      when: nodejs_check.rc != 0 or npm_check.rc != 0
+
+    - name: Criar link simbólico para npm se instalado via snap
+      ansible.builtin.file:
+        src: /snap/node/current/bin/npm
+        dest: /usr/local/bin/npm
+        state: link
+      when: (nodejs_check.rc != 0 or npm_check.rc != 0) and nodejs_install.failed
+
+    - name: Criar diretório de configuração do certbot
+      ansible.builtin.file:
+        path: /etc/letsencrypt
+        state: directory
+        mode: '0755'
+
+    - name: Verificar se as credenciais do Cloudflare estão configuradas
+      ansible.builtin.fail:
+        msg: "Credenciais do Cloudflare não configuradas. Execute: ./scripts/vault.sh edit"
+      when: >
+        (cloudflare_email == "your_cloudflare_email_here" or cloudflare_email is undefined) or
+        (cloudflare_api_key == "your_cloudflare_api_key_here" or cloudflare_api_key is undefined)
+
+    - name: Criar arquivo de credenciais do Cloudflare (modo legacy)
+      ansible.builtin.copy:
+        content: |
+          # Cloudflare API credentials used by Certbot (Legacy mode)
+          dns_cloudflare_email = {{ cloudflare_email }}
+          dns_cloudflare_api_key = {{ cloudflare_api_key }}
+        dest: /etc/letsencrypt/cloudflare.ini
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true  # Não mostra o conteúdo no log
+
+    - name: Verificar se o arquivo de credenciais foi criado
+      ansible.builtin.stat:
+        path: /etc/letsencrypt/cloudflare.ini
+      register: cloudflare_creds_file
+
+    - name: Mostrar status do arquivo de credenciais
+      ansible.builtin.debug:
+        msg: "Arquivo de credenciais: {{ 'Criado' if cloudflare_creds_file.stat.exists else 'Erro na criação' }}"
+
+    - name: Testar conectividade com Cloudflare API (modo legacy)
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/user"
+        method: GET
+        headers:
+          X-Auth-Email: "{{ cloudflare_email }}"
+          X-Auth-Key: "{{ cloudflare_api_key }}"
+          Content-Type: "application/json"
+        status_code: [200, 400, 401, 403]
+      register: cloudflare_test
+      no_log: true
+
+    - name: Mostrar resultado do teste da API Cloudflare
+      ansible.builtin.debug:
+        msg:
+          - "Status da API Cloudflare: {{ cloudflare_test.status }}"
+          - "Credenciais válidas: {{ 'Sim' if cloudflare_test.status == 200 else 'Não' }}"
+          - "Email: {{ cloudflare_email }}"
+
+    - name: Falhar se as credenciais do Cloudflare forem inválidas
+      ansible.builtin.fail:
+        msg: "Credenciais do Cloudflare inválidas. Verifique email e API key no vault."
+      when: cloudflare_test.status != 200
+
+    - name: Obter certificados SSL para todos os domínios
+      ansible.builtin.shell: |
+        certbot certonly \
+          --dns-cloudflare \
+          --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+          --email {{ letsencrypt_email }} \
+          --agree-tos \
+          --non-interactive \
+          --expand \
+          --verbose \
+          -d {{ domains.irc }} \
+          -d {{ domains.gamja }} \
+          -d {{ domains.chat }}
+      register: certbot_result
+      failed_when: false  # Não falhar automaticamente para poder mostrar o erro
+
+    - name: Mostrar resultado detalhado do certbot
+      ansible.builtin.debug:
+        msg:
+          - "Return code: {{ certbot_result.rc }}"
+          - "STDOUT: {{ certbot_result.stdout }}"
+          - "STDERR: {{ certbot_result.stderr }}"
+      when: certbot_result.rc != 0
+
+    - name: Aguardar um pouco antes de verificar certificados
+      ansible.builtin.pause:
+        seconds: 3
+
+    - name: Verificar se certificados foram criados
+      ansible.builtin.stat:
+        path: "{{ ssl_cert_dir }}/{{ domains.irc }}/fullchain.pem"
+      register: cert_check
+
+    - name: Mostrar resultado da verificação de certificados
+      ansible.builtin.debug:
+        msg:
+          - "Certificado encontrado: {{ cert_check.stat.exists }}"
+          - "Caminho: {{ ssl_cert_dir }}/{{ domains.irc }}/fullchain.pem"
+          - "Tamanho: {{ cert_check.stat.size | default('N/A') }} bytes"
+
+    - name: Listar diretório de certificados se não encontrado
+      ansible.builtin.command: ls -la {{ ssl_cert_dir }}/
+      register: cert_dir_listing
+      when: not cert_check.stat.exists
+      failed_when: false
+
+    - name: Mostrar conteúdo do diretório de certificados
+      ansible.builtin.debug:
+        msg: "{{ cert_dir_listing.stdout_lines }}"
+      when: not cert_check.stat.exists and cert_dir_listing.stdout_lines is defined
+
+    - name: Mostrar instruções para debug manual se certificados falharam
+      ansible.builtin.debug:
+        msg:
+          - "❌ Falha na obtenção de certificados. Para debug manual:"
+          - "🔍 ssh root@ananke -p 2200"
+          - "🔍 cat /etc/letsencrypt/cloudflare.ini"
+          - "🔍 certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini -d {{ domains.irc }} --dry-run -v"
+          - "🔍 tail -f /var/log/letsencrypt/letsencrypt.log"
+      when: not cert_check.stat.exists
+
+    - name: Falhar se certificados não foram obtidos
+      ansible.builtin.fail:
+        msg: "Falha na obtenção de certificados SSL. Verifique as credenciais do Cloudflare e execute debug manual."
+      when: not cert_check.stat.exists
+
+    - name: Criar links simbólicos dos certificados para todos os domínios
+      ansible.builtin.file:
+        src: "{{ ssl_cert_dir }}/{{ domains.irc }}"
+        dest: "{{ ssl_cert_dir }}/{{ item }}"
+        state: link
+        force: yes
+      loop:
+        - "{{ domains.gamja }}"
+        - "{{ domains.chat }}"
+      when: cert_check.stat.exists
+
+    - name: Verificar se todos os links foram criados
+      ansible.builtin.stat:
+        path: "{{ ssl_cert_dir }}/{{ item }}/fullchain.pem"
+      loop:
+        - "{{ domains.irc }}"
+        - "{{ domains.gamja }}"
+        - "{{ domains.chat }}"
+      register: all_domain_certs
+
+    - name: Mostrar status dos certificados por domínio
+      ansible.builtin.debug:
+        msg: "Certificado {{ item.item }}: {{ 'Disponível' if item.stat.exists else 'Não encontrado' }}"
+      loop: "{{ all_domain_certs.results }}"
+
+    - name: "Garante que o grupo exista: {{ ergo_group }}"
+      ansible.builtin.group:
+        name: "{{ ergo_group }}"
+        state: present
+
+    - name: "Adicionar o usuário ao grupo: {{ ergo_user }}"
       ansible.builtin.user:
-        name: ergo
-        group: ergo
+        name: "{{ ergo_user }}"
+        group: "{{ ergo_group }}"
         create_home: false  # Adicionado para evitar criação de home desnecessária
         system: true        # Define como usuário de sistema
 
-    - name: Copiar certificados do Let's Encrypt
+    - name: Copiar script de instalação de certificados do Let's Encrypt
       ansible.builtin.copy:
         src: "etc/letsencrypt/renewal-hooks/deploy/install-ergo-certificates"
-        dest: "/etc/letsencrypt/renewal-hooks/deploy/install-ergo-certificates"
+        dest: "{{ ssl_renewal_hooks_dir }}/install-ergo-certificates"
         owner: root
         group: root
         mode: "0755"
 
-    - name: Synchronize and delete files in dest on the remote host that are not found in src of localhost.
+    - name: Sincronizar arquivos de aplicação
       ansible.posix.synchronize:
         src: "usr/share/{{ item }}/"
-        dest: "/usr/share/{{ item }}/"
+        dest: "{{ app_dirs[item] }}/"
         delete: false
         recursive: true
         rsync_opts:
           - "--no-motd"
           - "--exclude=.git "
           - "--exclude=node_modules"
-          - "-e 'ssh -p 2200'"
-      loop: 
+          - "-e 'ssh -p {{ ansible_port }}'"
+      loop:
         - ergo
         - gamja
         - kiwiirc
-      when: refresh == true
+      when: refresh_apps
 
-    - name: Copiar os certificados do Ergo
+    - name: Copiar certificado fullchain do Ergo
+      ansible.builtin.copy:
+        src: "{{ ssl_cert_dir }}/{{ domains.irc }}/fullchain.pem"
+        dest: "{{ app_dirs.ergo }}/fullchain.pem"
+        owner: "{{ ergo_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0640'
+        remote_src: true
+
+    - name: Copiar chave privada do Ergo
+      ansible.builtin.copy:
+        src: "{{ ssl_cert_dir }}/{{ domains.irc }}/privkey.pem"
+        dest: "{{ app_dirs.ergo }}/privkey.pem"
+        owner: "{{ ergo_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0640'
+        remote_src: true
+
+    - name: Verificar instalação final do Node.js e npm
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - "node --version"
+        - "npm --version"
+      register: nodejs_final_versions
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar versões finais do Node.js e npm
+      ansible.builtin.debug:
+        msg: 
+          - "Node.js: {{ nodejs_final_versions.results[0].stdout if nodejs_final_versions.results[0].rc == 0 
+                       else 'ERRO: ' + nodejs_final_versions.results[0].stderr }}"
+          - "npm: {{ nodejs_final_versions.results[1].stdout if nodejs_final_versions.results[1].rc == 0 
+                    else 'ERRO: ' + nodejs_final_versions.results[1].stderr }}"
+
+    - name: Falhar se Node.js ou npm não estiver funcionando
+      ansible.builtin.fail:
+        msg: "Node.js ou npm não está funcionando corretamente. Verifique a instalação."
+      when: nodejs_final_versions.results[0].rc != 0 or nodejs_final_versions.results[1].rc != 0
+
+    - name: Mostrar instruções para instalação manual do Node.js
+      ansible.builtin.debug:
+        msg:
+          - "⚠️  Node.js/npm não está funcionando. Para instalar manualmente:"
+          - "🔧 Via snap: snap install node --classic"
+          - "🔧 Via nvm: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash && nvm install node"
+          - "📝 Depois execute novamente o playbook"
+      when: nodejs_final_versions.results[0].rc != 0 or nodejs_final_versions.results[1].rc != 0
+
+    - name: Executar npm install e build no Gamja
       ansible.builtin.shell: |
-        cp /etc/letsencrypt/live/irc.somdomato.com/fullchain.pem /usr/share/ergo
-        cp /etc/letsencrypt/live/irc.somdomato.com/privkey.pem /usr/share/ergo
-        chown ergo:nginx /usr/share/ergo/*.pem
-        chmod 640 /usr/share/ergo/*.pem
-
-    - name: Run npm install in a specific directory
-      command: |
+        cd "{{ app_dirs.gamja }}"
         npm install --include=dev
         npm run build
       args:
-        chdir: /usr/share/gamja
+        creates: "{{ app_dirs.gamja }}/dist"
+      when: nodejs_final_versions.results[0].rc == 0 and nodejs_final_versions.results[1].rc == 0
 
-    - name: Change ownership of a gamja & kiwiirc directory recursively
+    - name: Criar diretório de configuração do kiwiirc
+      ansible.builtin.file:
+        path: /etc/kiwiirc
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Copiar arquivo de configuração do kiwiirc
       ansible.builtin.copy:
         src: "etc/kiwiirc/client.json"
         dest: "/etc/kiwiirc/client.json"
-        force: true
+        owner: root
+        group: root
+        mode: '0644'
 
-    - name: Copy kiwiirc client config file
+    - name: Alterar propriedade dos diretórios gamja & kiwiirc
       ansible.builtin.file:
-        path: "/usr/share/{{ item }}"
-        owner: nginx
-        group: nginx
-        recurse: yes # Crucial for recursive ownership changes within a directory
+        path: "{{ app_dirs[item] }}"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        recurse: true # Crucial for recursive ownership changes within a directory
         state: directory # Ensures it's treated as a directory
-      loop: 
+      loop:
         - gamja
         - kiwiirc
 
-    - name: Change ownership of ergo directory recursively
+    - name: Alterar propriedade do diretório ergo
       ansible.builtin.file:
-        path: /usr/share/ergo
-        owner: ergo
-        group: ergo
-        recurse: yes 
+        path: "{{ app_dirs.ergo }}"
+        owner: "{{ ergo_user }}"
+        group: "{{ ergo_group }}"
+        recurse: true
         state: directory
 
     - name: Copiar configurações do Nginx
@@ -92,12 +420,12 @@
         mode: '0644'
         force: true
       loop:
-        - "50-irc.somdomato.com.conf"
-        - "51-gamja.somdomato.com.conf"
-        - "52-chat.somdomato.com.conf"
+        - "50-{{ domains.irc }}.conf"
+        - "51-{{ domains.gamja }}.conf"
+        - "52-{{ domains.chat }}.conf"
       notify: Reiniciar Nginx  # Usando handler para reinício condicional
 
-    - name: Copiar serviço systemd do Ergo
+    - name: Copiar serviços systemd
       ansible.builtin.copy:
         src: "etc/systemd/system/{{ item }}"
         dest: "/etc/systemd/system/{{ item }}"
@@ -109,22 +437,42 @@
         - "somdomato-ergo.service"
         - "somdomato-kiwiirc.service"
 
-
   handlers:
-    - name: Reiniciar serviço Ergo
+    - name: Mostrar resultado do certbot
+      ansible.builtin.debug:
+        var: certbot_result
+
+    - name: Reiniciar serviços
       ansible.builtin.systemd:
         name: "{{ item }}"
-        state: restarted
-        enabled: true
         daemon_reload: true
-      listen: "Reiniciar serviços"
+        state: restarted
       loop:
-        - "somdomato-ergo.service"  
-        - "somdomato-kiwiirc.service"  # Handler combinado
-
+        - "somdomato-ergo.service"
+        - "somdomato-kiwiirc.service"
 
     - name: Reiniciar Nginx
-      ansible.builtin.systemd:
-        name: nginx
-        state: restarted
-      listen: "Reiniciar serviços"
+      block:
+        - name: Testar configuração do Nginx
+          ansible.builtin.command: nginx -t
+          register: nginx_test
+          failed_when: false
+
+        - name: Mostrar erro de configuração do Nginx se houver
+          ansible.builtin.debug:
+            msg:
+              - "❌ Erro na configuração do Nginx:"
+              - "{{ nginx_test.stderr }}"
+              - "🔧 Verifique os certificados SSL em /etc/letsencrypt/live/"
+          when: nginx_test.rc != 0
+
+        - name: Reiniciar Nginx apenas se configuração estiver válida
+          ansible.builtin.systemd:
+            name: nginx
+            state: restarted
+          when: nginx_test.rc == 0
+
+        - name: Falhar se configuração do Nginx estiver inválida
+          ansible.builtin.fail:
+            msg: "Configuração do Nginx inválida. Corrija os erros antes de prosseguir."
+          when: nginx_test.rc != 0

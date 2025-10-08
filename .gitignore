@@ -1,6 +1,35 @@
+# Node modules
 node_modules/
+
+# Logs
 logs/
+*.log
+
+# Arquivos sensíveis do Ansible
+ansible/.vault_pass
+ansible/group_vars/vault.yml.bak
+
+# Certificados e chaves
 *.pem
+*.key
+*.crt
+
+# Arquivos antigos e backups
 *orig*
 *old*
 *.zip
+*.bak
+*~
+
+# Arquivos temporários
+*.tmp
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+
+# Arquivos do editor
+.vscode/
+.idea/
+*.swp
+*.swo

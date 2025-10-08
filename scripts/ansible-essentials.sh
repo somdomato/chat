@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-# Configurações do projeto
+# Script para executar apenas as partes essenciais do playbook
+# Útil para testar sem a instalação do Node.js
+
 MACHINE="ananke"
 ROOT="$(dirname "$(readlink -f "$0")")/.."
 ANSIBLE_DIR="${ROOT}/ansible"
@@ -9,37 +11,30 @@ VAULT_PASSWORD_FILE="${ANSIBLE_DIR}/.vault_pass"
 # Verificar se o arquivo de senha do vault existe
 if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
     echo "❌ Arquivo de senha do vault não encontrado: $VAULT_PASSWORD_FILE"
-    echo "📋 Execute: echo 'sua_senha_do_vault' > ${VAULT_PASSWORD_FILE}"
-    echo "🔒 E configure: chmod 600 ${VAULT_PASSWORD_FILE}"
+    echo "📋 Execute: ./scripts/vault.sh setup"
     exit 1
 fi
 
-# Verificar se o vault está configurado
-if ! ansible-vault view "${ANSIBLE_DIR}/group_vars/vault.yml" --vault-password-file="$VAULT_PASSWORD_FILE" >/dev/null 2>&1; then
-    echo "❌ Erro ao acessar o vault. Verifique se:"
-    echo "   1. O arquivo vault.yml está criptografado"
-    echo "   2. A senha do vault está correta"
-    echo "   3. Execute: cd ansible && ansible-vault encrypt group_vars/vault.yml"
-    exit 1
-fi
-
-echo "🚀 Executando playbook Ansible..."
+echo "🚀 Executando playbook Ansible (modo essencial)..."
 echo "📍 Máquina: $MACHINE"
 echo "📁 Diretório: $ANSIBLE_DIR"
 
-# Executar o playbook com todas as configurações necessárias
+# Executar apenas tags específicas (pular Node.js)
 ANSIBLE_PYTHON_INTERPRETER=auto_silent \
 ANSIBLE_CONFIG="${ANSIBLE_DIR}/ansible.cfg" \
 ansible-playbook \
     --vault-password-file="$VAULT_PASSWORD_FILE" \
     --inventory="$MACHINE," \
     "${ANSIBLE_DIR}/playbook.yml" \
-    --diff
+    --diff \
+    --skip-tags nodejs,gamja_build
 
 exit_code=$?
 
 if [[ $exit_code -eq 0 ]]; then
     echo "✅ Playbook executado com sucesso!"
+    echo "📝 Para instalar Node.js separadamente:"
+    echo "   ssh root@$MACHINE -p 2200 'snap install node --classic'"
 else
     echo "❌ Erro na execução do playbook (código: $exit_code)"
 fi
