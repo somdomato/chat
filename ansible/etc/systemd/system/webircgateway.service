@@ -1,0 +1,15 @@
+[Unit]
+Description=KiwiIRC WebIRC Gateway
+After=network.target
+
+[Service]
+Type=simple
+#Type=oneshot
+User=nginx
+Group=nginx
+WorkingDirectory=/opt
+ExecStart=/opt/webircgateway/webircgateway --config /opt/webircgateway/config.conf
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
