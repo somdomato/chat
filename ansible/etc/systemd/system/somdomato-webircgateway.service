@@ -1,0 +1,26 @@
+[Unit]
+Description=WebIRC Gateway for Kiwi IRC
+After=network.target somdomato-ergo.service
+Wants=somdomato-ergo.service
+
+[Service]
+Type=simple
+User=nginx
+Group=nginx
+WorkingDirectory=/opt/webircgateway
+ExecStart=/opt/webircgateway/webircgateway --config=/etc/webircgateway/config.conf
+ExecReload=/usr/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+
+# Segurança
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/webircgateway
+
+[Install]
+WantedBy=multi-user.target

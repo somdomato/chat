@@ -1,6 +1,6 @@
 ---
 
-- name: Preparar o ambiente para o Ergo e Gamja
+- name: Preparar o ambiente para o Ergo, KiwiIRC e WebIRC Gateway
   hosts: all
   become: true
   remote_user: "{{ ansible_user }}"
@@ -8,16 +8,30 @@
     - group_vars/vault.yml
 
   tasks:
-    - name: Atualizar cache de pacotes
+    # Detecção do sistema operacional e configuração de gerenciador de pacotes
+    - name: Detectar família do sistema operacional
+      ansible.builtin.set_fact:
+        pkg_manager: "{{ 'dnf' if ansible_os_family == 'RedHat' else 'apt' }}"
+        is_rhel_family: "{{ ansible_os_family == 'RedHat' }}"
+        is_debian_family: "{{ ansible_os_family == 'Debian' }}"
+
+    - name: Atualizar cache de pacotes (Debian/Ubuntu)
       ansible.builtin.apt:
         update_cache: yes
         cache_valid_time: 3600
+      when: is_debian_family
 
-    - name: Corrigir pacotes quebrados se houver
+    - name: Atualizar cache de pacotes (Oracle Linux/RHEL/Rocky)
+      ansible.builtin.dnf:
+        update_cache: yes
+      when: is_rhel_family
+
+    - name: Corrigir pacotes quebrados se houver (Debian/Ubuntu)
       ansible.builtin.command: apt-get -f install -y
       register: fix_broken
       failed_when: fix_broken.rc not in [0, 100]
       changed_when: fix_broken.rc == 0
+      when: is_debian_family
 
     - name: Verificar se Node.js já está instalado
       ansible.builtin.command: node --version
@@ -59,7 +73,7 @@
         autoremove: true
         autoclean: true
 
-    - name: Instalar dependências básicas
+    - name: Instalar dependências básicas (Debian/Ubuntu)
       ansible.builtin.package:
         name:
           - curl
@@ -67,14 +81,38 @@
           - ca-certificates
           - apt-transport-https
           - software-properties-common
+          - unzip
         state: present
+      when: is_debian_family
 
-    - name: Instalar certbot e plugin cloudflare
+    - name: Instalar dependências básicas (Oracle Linux/RHEL/Rocky)
+      ansible.builtin.package:
+        name:
+          - curl
+          - gnupg2
+          - ca-certificates
+          - unzip
+          - policycoreutils
+          - policycoreutils-python-utils
+          - selinux-policy-targeted
+        state: present
+      when: is_rhel_family
+
+    - name: Instalar certbot (Debian/Ubuntu)
       ansible.builtin.package:
         name:
           - certbot
           - python3-certbot-dns-cloudflare
         state: present
+      when: is_debian_family
+
+    - name: Instalar certbot (Oracle Linux/RHEL/Rocky)
+      ansible.builtin.package:
+        name:
+          - certbot
+          - python3-certbot-dns-cloudflare
+        state: present
+      when: is_rhel_family
 
     - name: Verificar versão do módulo cloudflare instalado
       ansible.builtin.shell: python3 -c "import cloudflare; print(cloudflare.__version__)"
@@ -86,36 +124,60 @@
       ansible.builtin.debug:
         msg: "Módulo cloudflare versão: {{ cloudflare_version.stdout if cloudflare_version.rc == 0 else 'Erro ao verificar' }}"
 
-    - name: Instalar nginx
+    - name: Instalar nginx (Debian/Ubuntu)
       ansible.builtin.package:
         name: nginx
         state: present
+      when: is_debian_family
 
-    - name: Baixar e adicionar chave GPG do NodeSource (método moderno)
+    - name: Instalar nginx (Oracle Linux/RHEL/Rocky)
+      ansible.builtin.package:
+        name: nginx
+        state: present
+      when: is_rhel_family
+
+    # Node.js installation - compatível com múltiplas distros
+
+    - name: Baixar e adicionar chave GPG do NodeSource (Debian/Ubuntu)
       ansible.builtin.get_url:
         url: https://deb.nodesource.com/gpgkey/nodesource.gpg.key
         dest: /tmp/nodesource.gpg.key
         mode: '0644'
-      when: nodejs_check.rc != 0 or npm_check.rc != 0
+      when: (nodejs_check.rc != 0 or npm_check.rc != 0) and is_debian_family
 
-    - name: Adicionar chave GPG do NodeSource ao keyring
+    - name: Adicionar chave GPG do NodeSource ao keyring (Debian/Ubuntu)
       ansible.builtin.shell: |
         gpg --dearmor < /tmp/nodesource.gpg.key > /usr/share/keyrings/nodesource.gpg
         chmod 644 /usr/share/keyrings/nodesource.gpg
       args:
         creates: /usr/share/keyrings/nodesource.gpg
-      when: nodejs_check.rc != 0 or npm_check.rc != 0
+      when: (nodejs_check.rc != 0 or npm_check.rc != 0) and is_debian_family
 
-    - name: Adicionar repositório NodeSource para Node.js 24.x
+    - name: Adicionar repositório NodeSource para Node.js 24.x (Debian/Ubuntu)
       ansible.builtin.apt_repository:
         repo: "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x {{ ansible_distribution_release }} main"
         state: present
-      when: nodejs_check.rc != 0 or npm_check.rc != 0
+      when: (nodejs_check.rc != 0 or npm_check.rc != 0) and is_debian_family
 
-    - name: Atualizar cache após adicionar repositório NodeSource
+    - name: Adicionar repositório NodeSource para Node.js 24.x (Oracle Linux/RHEL/Rocky)
+      ansible.builtin.yum_repository:
+        name: nodesource
+        description: Node.js Packages for Enterprise Linux
+        baseurl: "https://rpm.nodesource.com/pub_24.x/nodistro/repo/x86_64/"
+        gpgcheck: yes
+        gpgkey: https://rpm.nodesource.com/pub/el/NODESOURCE-GPG-SIGNING-KEY-EL
+        enabled: yes
+      when: (nodejs_check.rc != 0 or npm_check.rc != 0) and is_rhel_family
+
+    - name: Atualizar cache após adicionar repositório NodeSource (Debian/Ubuntu)
       ansible.builtin.apt:
         update_cache: true
-      when: nodejs_check.rc != 0 or npm_check.rc != 0
+      when: (nodejs_check.rc != 0 or npm_check.rc != 0) and is_debian_family
+
+    - name: Atualizar cache após adicionar repositório NodeSource (Oracle Linux/RHEL/Rocky)
+      ansible.builtin.dnf:
+        update_cache: true
+      when: (nodejs_check.rc != 0 or npm_check.rc != 0) and is_rhel_family
 
     - name: Instalar Node.js via NodeSource
       ansible.builtin.package:
@@ -131,6 +193,70 @@
         dest: /usr/local/bin/npm
         state: link
       when: (nodejs_check.rc != 0 or npm_check.rc != 0) and nodejs_install.failed
+
+    # Configuração de SELinux para Oracle Linux/RHEL/Rocky
+    - name: Verificar estado do SELinux
+      ansible.builtin.command: getenforce
+      register: selinux_status
+      failed_when: false
+      changed_when: false
+      when: is_rhel_family
+
+    - name: Configurar contextos SELinux para diretórios do Ergo
+      community.general.sefcontext:
+        target: "{{ app_dirs.ergo }}(/.*)?"
+        setype: httpd_sys_content_t
+        state: present
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
+    - name: Configurar contextos SELinux para diretórios do KiwiIRC
+      community.general.sefcontext:
+        target: "{{ app_dirs.kiwiirc }}(/.*)?"
+        setype: httpd_sys_content_t
+        state: present
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
+    - name: Configurar contextos SELinux para diretórios do WebIRC Gateway
+      community.general.sefcontext:
+        target: "{{ app_dirs.webircgateway }}(/.*)?"
+        setype: httpd_sys_content_t
+        state: present
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
+    - name: Configurar contexto SELinux para executáveis
+      community.general.sefcontext:
+        target: "{{ item }}"
+        setype: bin_t
+        state: present
+      loop:
+        - "{{ app_dirs.ergo }}/ergo"
+        - "{{ app_dirs.webircgateway }}/webircgateway"
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
+    - name: Permitir nginx conectar à rede (SELinux)
+      ansible.posix.seboolean:
+        name: httpd_can_network_connect
+        state: yes
+        persistent: yes
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
+    - name: Permitir nginx conectar a portas não-padrão (SELinux)
+      ansible.posix.seboolean:
+        name: httpd_can_network_relay
+        state: yes
+        persistent: yes
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
+    - name: Aplicar contextos SELinux nos diretórios
+      ansible.builtin.command: "restorecon -Rv {{ item }}"
+      loop:
+        - "{{ app_dirs.ergo }}"
+        - "{{ app_dirs.kiwiirc }}"
+        - "{{ app_dirs.webircgateway }}"
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+      changed_when: true
+
+    # Certificados SSL
 
     - name: Criar diretório de configuração do certbot
       ansible.builtin.file:
@@ -201,7 +327,6 @@
           --expand \
           --verbose \
           -d {{ domains.irc }} \
-          -d {{ domains.gamja }} \
           -d {{ domains.chat }}
       register: certbot_result
       failed_when: false  # Não falhar automaticamente para poder mostrar o erro
@@ -256,15 +381,12 @@
         msg: "Falha na obtenção de certificados SSL. Verifique as credenciais do Cloudflare e execute debug manual."
       when: not cert_check.stat.exists
 
-    - name: Criar links simbólicos dos certificados para todos os domínios
+    - name: Criar links simbólicos dos certificados para chat.somdomato.com
       ansible.builtin.file:
         src: "{{ ssl_cert_dir }}/{{ domains.irc }}"
-        dest: "{{ ssl_cert_dir }}/{{ item }}"
+        dest: "{{ ssl_cert_dir }}/{{ domains.chat }}"
         state: link
         force: yes
-      loop:
-        - "{{ domains.gamja }}"
-        - "{{ domains.chat }}"
       when: cert_check.stat.exists
 
     - name: Verificar se todos os links foram criados
@@ -272,7 +394,6 @@
         path: "{{ ssl_cert_dir }}/{{ item }}/fullchain.pem"
       loop:
         - "{{ domains.irc }}"
-        - "{{ domains.gamja }}"
         - "{{ domains.chat }}"
       register: all_domain_certs
 
@@ -309,14 +430,94 @@
         recursive: true
         rsync_opts:
           - "--no-motd"
-          - "--exclude=.git "
+          - "--exclude=.git"
           - "--exclude=node_modules"
           - "-e 'ssh -p {{ ansible_port }}'"
       loop:
         - ergo
-        - gamja
-        - kiwiirc
+        # - gamja  # Comentado temporariamente
+        # - kiwiirc  # KiwiIRC será baixado do GitHub
       when: refresh_apps
+
+    # Baixar e instalar KiwiIRC do GitHub
+    - name: Criar diretório temporário para download do KiwiIRC
+      ansible.builtin.file:
+        path: /tmp/kiwiirc_download
+        state: directory
+        mode: '0755'
+
+    - name: Baixar KiwiIRC v1.7.1 do GitHub
+      ansible.builtin.get_url:
+        url: https://github.com/kiwiirc/kiwiirc/releases/download/v1.7.1/kiwiirc-client_v1.7.1-2_any.zip
+        dest: /tmp/kiwiirc_download/kiwiirc.zip
+        mode: '0644'
+      when: refresh_apps
+
+    - name: Criar diretório do KiwiIRC
+      ansible.builtin.file:
+        path: "{{ app_dirs.kiwiirc }}"
+        state: directory
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0755'
+
+    - name: Descompactar KiwiIRC
+      ansible.builtin.unarchive:
+        src: /tmp/kiwiirc_download/kiwiirc.zip
+        dest: "{{ app_dirs.kiwiirc }}"
+        remote_src: yes
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+      when: refresh_apps
+
+    - name: Sincronizar temas personalizados do KiwiIRC
+      ansible.posix.synchronize:
+        src: "usr/share/kiwiirc/static/"
+        dest: "{{ app_dirs.kiwiirc }}/static/"
+        delete: false
+        recursive: true
+        rsync_opts:
+          - "--no-motd"
+          - "-e 'ssh -p {{ ansible_port }}'"
+      when: refresh_apps
+
+    - name: Limpar arquivos temporários do KiwiIRC
+      ansible.builtin.file:
+        path: /tmp/kiwiirc_download
+        state: absent
+
+    # Configuração do WebIRC Gateway
+    - name: Criar diretório do WebIRC Gateway
+      ansible.builtin.file:
+        path: "{{ app_dirs.webircgateway }}"
+        state: directory
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0755'
+
+    - name: Copiar binário do WebIRC Gateway do diretório working
+      ansible.builtin.copy:
+        src: "working/opt/webircgateway/webircgateway"
+        dest: "{{ app_dirs.webircgateway }}/webircgateway"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0755'
+
+    - name: Criar diretório de configuração do WebIRC Gateway
+      ansible.builtin.file:
+        path: /etc/webircgateway
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Copiar configuração do WebIRC Gateway do diretório working
+      ansible.builtin.copy:
+        src: "working/opt/webircgateway/config.conf"
+        dest: "/etc/webircgateway/config.conf"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0644'
 
     - name: Copiar certificado fullchain do Ergo
       ansible.builtin.copy:
@@ -367,14 +568,15 @@
           - "📝 Depois execute novamente o playbook"
       when: nodejs_final_versions.results[0].rc != 0 or nodejs_final_versions.results[1].rc != 0
 
-    - name: Executar npm install e build no Gamja
-      ansible.builtin.shell: |
-        cd "{{ app_dirs.gamja }}"
-        npm install --include=dev
-        npm run build
-      args:
-        creates: "{{ app_dirs.gamja }}/dist"
-      when: nodejs_final_versions.results[0].rc == 0 and nodejs_final_versions.results[1].rc == 0
+    # GAMJA - Comentado temporariamente
+    # - name: Executar npm install e build no Gamja
+    #   ansible.builtin.shell: |
+    #     cd "{{ app_dirs.gamja }}"
+    #     npm install --include=dev
+    #     npm run build
+    #   args:
+    #     creates: "{{ app_dirs.gamja }}/dist"
+    #   when: nodejs_final_versions.results[0].rc == 0 and nodejs_final_versions.results[1].rc == 0
 
     - name: Criar diretório de configuração do kiwiirc
       ansible.builtin.file:
@@ -392,22 +594,36 @@
         group: root
         mode: '0644'
 
-    - name: Alterar propriedade dos diretórios gamja & kiwiirc
+    - name: Alterar propriedade do diretório kiwiirc
       ansible.builtin.file:
-        path: "{{ app_dirs[item] }}"
+        path: "{{ app_dirs.kiwiirc }}"
         owner: "{{ nginx_user }}"
         group: "{{ nginx_group }}"
-        recurse: true # Crucial for recursive ownership changes within a directory
-        state: directory # Ensures it's treated as a directory
-      loop:
-        - gamja
-        - kiwiirc
+        recurse: true
+        state: directory
+
+    # GAMJA - Comentado temporariamente
+    # - name: Alterar propriedade do diretório gamja
+    #   ansible.builtin.file:
+    #     path: "{{ app_dirs.gamja }}"
+    #     owner: "{{ nginx_user }}"
+    #     group: "{{ nginx_group }}"
+    #     recurse: true
+    #     state: directory
 
     - name: Alterar propriedade do diretório ergo
       ansible.builtin.file:
         path: "{{ app_dirs.ergo }}"
         owner: "{{ ergo_user }}"
         group: "{{ ergo_group }}"
+        recurse: true
+        state: directory
+
+    - name: Alterar propriedade do diretório webircgateway
+      ansible.builtin.file:
+        path: "{{ app_dirs.webircgateway }}"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
         recurse: true
         state: directory
 
@@ -421,7 +637,7 @@
         force: true
       loop:
         - "50-{{ domains.irc }}.conf"
-        - "51-{{ domains.gamja }}.conf"
+        # - "51-{{ domains.gamja }}.conf"  # Gamja comentado temporariamente
         - "52-{{ domains.chat }}.conf"
       notify: Reiniciar Nginx  # Usando handler para reinício condicional
 
@@ -435,7 +651,8 @@
       notify: Reiniciar serviços  # Aciona recarregamento se o arquivo mudar
       loop:
         - "somdomato-ergo.service"
-        - "somdomato-kiwiirc.service"
+        - "somdomato-kiwiirc.service"  # Apenas se KiwiIRC precisar de serviço systemd
+        - "somdomato-webircgateway.service"
 
   handlers:
     - name: Mostrar resultado do certbot
@@ -449,7 +666,8 @@
         state: restarted
       loop:
         - "somdomato-ergo.service"
-        - "somdomato-kiwiirc.service"
+        - "somdomato-webircgateway.service"
+        # - "somdomato-kiwiirc.service"  # Apenas se necessário
 
     - name: Reiniciar Nginx
       block:

@@ -1,17 +1,12 @@
 [Unit]
-Description=Kiwi IRC Web IRC Gateway
-After=network.target
+Description=Kiwi IRC Web Client (Static Files)
+# Este serviço não é necessário pois o KiwiIRC é servido pelo Nginx como arquivos estáticos
+# Mantido apenas para referência/compatibilidade
 
 [Service]
-User=kiwiirc
-Group=kiwiirc
-RuntimeDirectory=kiwiirc
-WorkingDirectory=/usr/share/kiwiirc/
-ExecStart=/usr/bin/kiwiirc --config=/etc/kiwiirc/config.conf
-ExecReload=/usr/bin/kill -HUP $MAINPID
-KillMode=process
-RestartSec=10s
-Restart=always
+Type=oneshot
+ExecStart=/bin/true
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
