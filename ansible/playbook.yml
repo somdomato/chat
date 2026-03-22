@@ -11,14 +11,14 @@
     # Detecção do sistema operacional e configuração de gerenciador de pacotes
     - name: Detectar família do sistema operacional
       ansible.builtin.set_fact:
-        pkg_manager: "{{ 'dnf' if ansible_os_family == 'RedHat' else 'apt' }}"
-        is_rhel_family: "{{ ansible_os_family == 'RedHat' }}"
-        is_debian_family: "{{ ansible_os_family == 'Debian' }}"
+        pkg_manager: "{{ 'dnf' if ansible_facts['os_family'] == 'RedHat' else 'apt' }}"
+        is_rhel_family: "{{ ansible_facts['os_family'] == 'RedHat' }}"
+        is_debian_family: "{{ ansible_facts['os_family'] == 'Debian' }}"
 
     # ===== BACKUP DAS CONFIGURAÇÕES EXISTENTES =====
     - name: Definir timestamp para backup
       ansible.builtin.set_fact:
-        backup_timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
+        backup_timestamp: "{{ ansible_facts['date_time']['iso8601_basic_short'] }}"
 
     - name: Criar diretório de backup com timestamp
       ansible.builtin.file:
@@ -342,14 +342,24 @@
         persistent: yes
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
 
-    - name: Aplicar contextos SELinux nos diretórios
-      ansible.builtin.command: "restorecon -Rv {{ item }}"
+    - name: Verificar quais diretórios de aplicação existem (SELinux)
+      ansible.builtin.stat:
+        path: "{{ item }}"
       loop:
         - "{{ app_dirs.ergo }}"
         - "{{ app_dirs.kiwiirc }}"
         - "{{ app_dirs.gamja }}"
         - "{{ app_dirs.webircgateway }}"
+      register: app_dirs_stat
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
+    - name: Aplicar contextos SELinux nos diretórios
+      ansible.builtin.command: "restorecon -Rv {{ item.item }}"
+      loop: "{{ app_dirs_stat.results }}"
+      when:
+        - is_rhel_family and selinux_status.stdout == "Enforcing"
+        - item.stat is defined
+        - item.stat.exists
       changed_when: true
 
     # Certificados SSL
@@ -478,6 +488,27 @@
         msg: "Falha na obtenção de certificados SSL. Verifique as credenciais do Cloudflare e execute debug manual."
       when: not cert_check.stat.exists
 
+    - name: Verificar se destinos dos links simbólicos são diretórios
+      ansible.builtin.stat:
+        path: "{{ ssl_cert_dir }}/{{ item }}"
+      loop:
+        - "{{ domains.chat }}"
+        - "{{ domains.gamja }}"
+      register: symlink_dest_check
+      when: cert_check.stat.exists
+
+    - name: Remover diretórios existentes que impedem criação dos links simbólicos
+      ansible.builtin.file:
+        path: "{{ item.stat.path }}"
+        state: absent
+      loop: "{{ symlink_dest_check.results }}"
+      when:
+        - cert_check.stat.exists
+        - item.stat is defined
+        - item.stat.exists
+        - item.stat.isdir
+        - not item.stat.islnk
+
     - name: Criar links simbólicos dos certificados para chat.somdomato.com
       ansible.builtin.file:
         src: "{{ ssl_cert_dir }}/{{ domains.irc }}"
@@ -603,7 +634,7 @@
 
     - name: Copiar binário do WebIRC Gateway do diretório working
       ansible.builtin.copy:
-        src: "working/opt/webircgateway/webircgateway"
+        src: "../working/opt/webircgateway/webircgateway"
         dest: "{{ app_dirs.webircgateway }}/webircgateway"
         owner: "{{ nginx_user }}"
         group: "{{ nginx_group }}"
@@ -619,7 +650,7 @@
 
     - name: Copiar configuração do WebIRC Gateway do diretório working
       ansible.builtin.copy:
-        src: "working/opt/webircgateway/config.conf"
+        src: "../working/opt/webircgateway/config.conf"
         dest: "/etc/webircgateway/config.conf"
         owner: "{{ nginx_user }}"
         group: "{{ nginx_group }}"
@@ -759,6 +790,16 @@
         group: "{{ nginx_group }}"
         recurse: true
         state: directory
+
+    - name: Aplicar contextos SELinux nos diretórios de aplicação
+      ansible.builtin.command: "restorecon -Rv {{ item }}"
+      loop:
+        - "{{ app_dirs.ergo }}"
+        - "{{ app_dirs.kiwiirc }}"
+        - "{{ app_dirs.gamja }}"
+        - "{{ app_dirs.webircgateway }}"
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+      changed_when: true
 
     - name: Copiar configurações do Nginx
       ansible.builtin.copy:
