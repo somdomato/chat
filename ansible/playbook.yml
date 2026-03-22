@@ -15,6 +15,93 @@
         is_rhel_family: "{{ ansible_os_family == 'RedHat' }}"
         is_debian_family: "{{ ansible_os_family == 'Debian' }}"
 
+    # ===== BACKUP DAS CONFIGURAÇÕES EXISTENTES =====
+    - name: Definir timestamp para backup
+      ansible.builtin.set_fact:
+        backup_timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
+
+    - name: Criar diretório de backup com timestamp
+      ansible.builtin.file:
+        path: "{{ backup_dir }}/{{ backup_timestamp }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Fazer backup das configurações do Nginx (sites.d)
+      ansible.builtin.archive:
+        path: /etc/nginx/sites.d
+        dest: "{{ backup_dir }}/{{ backup_timestamp }}/nginx-sites.tar.gz"
+        format: gz
+      failed_when: false
+
+    - name: Fazer backup da configuração do KiwiIRC
+      ansible.builtin.archive:
+        path: /etc/kiwiirc
+        dest: "{{ backup_dir }}/{{ backup_timestamp }}/kiwiirc-config.tar.gz"
+        format: gz
+      failed_when: false
+
+    - name: Fazer backup dos serviços systemd do SDM
+      ansible.builtin.shell: >
+        tar czf {{ backup_dir }}/{{ backup_timestamp }}/systemd-services.tar.gz
+        $(ls /etc/systemd/system/somdomato-*.service
+        /etc/systemd/system/ergo.service
+        /etc/systemd/system/webircgateway.service 2>/dev/null) 2>/dev/null || true
+      changed_when: false
+
+    - name: Fazer backup das configurações de renovação do Let's Encrypt
+      ansible.builtin.archive:
+        path: /etc/letsencrypt/renewal
+        dest: "{{ backup_dir }}/{{ backup_timestamp }}/letsencrypt-renewal.tar.gz"
+        format: gz
+      failed_when: false
+
+    - name: Fazer backup dos certificados TLS (live)
+      ansible.builtin.archive:
+        path: /etc/letsencrypt/live
+        dest: "{{ backup_dir }}/{{ backup_timestamp }}/letsencrypt-live.tar.gz"
+        format: gz
+      failed_when: false
+
+    - name: Fazer backup do diretório do Ergo
+      ansible.builtin.archive:
+        path: "{{ app_dirs.ergo }}"
+        dest: "{{ backup_dir }}/{{ backup_timestamp }}/ergo-app.tar.gz"
+        format: gz
+        exclude_path:
+          - "{{ app_dirs.ergo }}/languages"
+      failed_when: false
+
+    - name: Fazer backup do diretório do KiwiIRC
+      ansible.builtin.archive:
+        path: "{{ app_dirs.kiwiirc }}"
+        dest: "{{ backup_dir }}/{{ backup_timestamp }}/kiwiirc-app.tar.gz"
+        format: gz
+      failed_when: false
+
+    - name: Fazer backup do diretório do Gamja
+      ansible.builtin.archive:
+        path: "{{ app_dirs.gamja }}"
+        dest: "{{ backup_dir }}/{{ backup_timestamp }}/gamja-app.tar.gz"
+        format: gz
+        exclude_path:
+          - "{{ app_dirs.gamja }}/node_modules"
+      failed_when: false
+
+    - name: Listar arquivos de backup criados
+      ansible.builtin.find:
+        paths: "{{ backup_dir }}/{{ backup_timestamp }}"
+        patterns: "*.tar.gz"
+      register: backup_files
+
+    - name: Mostrar resumo dos backups
+      ansible.builtin.debug:
+        msg:
+          - "Backups salvos em: {{ backup_dir }}/{{ backup_timestamp }}/"
+          - "Arquivos: {{ backup_files.files | map(attribute='path') | map('basename') | list }}"
+
+    # ===== ATUALIZAÇÃO DE CACHE DE PACOTES =====
     - name: Atualizar cache de pacotes (Debian/Ubuntu)
       ansible.builtin.apt:
         update_cache: yes
@@ -72,6 +159,7 @@
       ansible.builtin.apt:
         autoremove: true
         autoclean: true
+      when: is_debian_family
 
     - name: Instalar dependências básicas (Debian/Ubuntu)
       ansible.builtin.package:
@@ -163,7 +251,7 @@
       ansible.builtin.yum_repository:
         name: nodesource
         description: Node.js Packages for Enterprise Linux
-        baseurl: "https://rpm.nodesource.com/pub_24.x/nodistro/repo/x86_64/"
+        baseurl: "https://rpm.nodesource.com/pub_24.x/nodistro/repo/{{ ansible_architecture }}/"
         gpgcheck: yes
         gpgkey: https://rpm.nodesource.com/pub/el/NODESOURCE-GPG-SIGNING-KEY-EL
         enabled: yes
@@ -216,6 +304,13 @@
         state: present
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
 
+    - name: Configurar contextos SELinux para diretórios do Gamja
+      community.general.sefcontext:
+        target: "{{ app_dirs.gamja }}(/.*)?"
+        setype: httpd_sys_content_t
+        state: present
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
     - name: Configurar contextos SELinux para diretórios do WebIRC Gateway
       community.general.sefcontext:
         target: "{{ app_dirs.webircgateway }}(/.*)?"
@@ -252,6 +347,7 @@
       loop:
         - "{{ app_dirs.ergo }}"
         - "{{ app_dirs.kiwiirc }}"
+        - "{{ app_dirs.gamja }}"
         - "{{ app_dirs.webircgateway }}"
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
       changed_when: true
@@ -327,7 +423,8 @@
           --expand \
           --verbose \
           -d {{ domains.irc }} \
-          -d {{ domains.chat }}
+          -d {{ domains.chat }} \
+          -d {{ domains.gamja }}
       register: certbot_result
       failed_when: false  # Não falhar automaticamente para poder mostrar o erro
 
@@ -389,12 +486,21 @@
         force: yes
       when: cert_check.stat.exists
 
+    - name: Criar links simbólicos dos certificados para gamja.somdomato.com
+      ansible.builtin.file:
+        src: "{{ ssl_cert_dir }}/{{ domains.irc }}"
+        dest: "{{ ssl_cert_dir }}/{{ domains.gamja }}"
+        state: link
+        force: yes
+      when: cert_check.stat.exists
+
     - name: Verificar se todos os links foram criados
       ansible.builtin.stat:
         path: "{{ ssl_cert_dir }}/{{ item }}/fullchain.pem"
       loop:
         - "{{ domains.irc }}"
         - "{{ domains.chat }}"
+        - "{{ domains.gamja }}"
       register: all_domain_certs
 
     - name: Mostrar status dos certificados por domínio
@@ -435,8 +541,8 @@
           - "-e 'ssh -p {{ ansible_port }}'"
       loop:
         - ergo
-        # - gamja  # Comentado temporariamente
-        # - kiwiirc  # KiwiIRC será baixado do GitHub
+        - gamja
+        # - kiwiirc  # KiwiIRC é baixado do GitHub (veja tarefa abaixo)
       when: refresh_apps
 
     # Baixar e instalar KiwiIRC do GitHub
@@ -568,15 +674,43 @@
           - "📝 Depois execute novamente o playbook"
       when: nodejs_final_versions.results[0].rc != 0 or nodejs_final_versions.results[1].rc != 0
 
-    # GAMJA - Comentado temporariamente
-    # - name: Executar npm install e build no Gamja
-    #   ansible.builtin.shell: |
-    #     cd "{{ app_dirs.gamja }}"
-    #     npm install --include=dev
-    #     npm run build
-    #   args:
-    #     creates: "{{ app_dirs.gamja }}/dist"
-    #   when: nodejs_final_versions.results[0].rc == 0 and nodejs_final_versions.results[1].rc == 0
+    - name: Criar diretório do Gamja
+      ansible.builtin.file:
+        path: "{{ app_dirs.gamja }}"
+        state: directory
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0755'
+
+    - name: Executar npm install no Gamja
+      ansible.builtin.shell: |
+        cd "{{ app_dirs.gamja }}"
+        npm install --include=dev
+      args:
+        chdir: "{{ app_dirs.gamja }}"
+      when: >
+        refresh_apps and
+        nodejs_final_versions.results[0].rc == 0 and
+        nodejs_final_versions.results[1].rc == 0
+
+    - name: Executar build do Gamja (parcel)
+      ansible.builtin.shell: |
+        cd "{{ app_dirs.gamja }}"
+        npm run build
+      args:
+        chdir: "{{ app_dirs.gamja }}"
+      when: >
+        refresh_apps and
+        nodejs_final_versions.results[0].rc == 0 and
+        nodejs_final_versions.results[1].rc == 0
+      register: gamja_build_result
+
+    - name: Mostrar resultado do build do Gamja
+      ansible.builtin.debug:
+        msg:
+          - "Build Gamja: {{ 'OK' if gamja_build_result.rc == 0 else 'FALHOU' }}"
+          - "{{ gamja_build_result.stdout_lines | default([]) | last | default('') }}"
+      when: gamja_build_result is defined and not gamja_build_result.skipped | default(false)
 
     - name: Criar diretório de configuração do kiwiirc
       ansible.builtin.file:
@@ -602,14 +736,13 @@
         recurse: true
         state: directory
 
-    # GAMJA - Comentado temporariamente
-    # - name: Alterar propriedade do diretório gamja
-    #   ansible.builtin.file:
-    #     path: "{{ app_dirs.gamja }}"
-    #     owner: "{{ nginx_user }}"
-    #     group: "{{ nginx_group }}"
-    #     recurse: true
-    #     state: directory
+    - name: Alterar propriedade do diretório gamja
+      ansible.builtin.file:
+        path: "{{ app_dirs.gamja }}"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        recurse: true
+        state: directory
 
     - name: Alterar propriedade do diretório ergo
       ansible.builtin.file:
@@ -637,7 +770,7 @@
         force: true
       loop:
         - "50-{{ domains.irc }}.conf"
-        # - "51-{{ domains.gamja }}.conf"  # Gamja comentado temporariamente
+        - "51-{{ domains.gamja }}.conf"
         - "52-{{ domains.chat }}.conf"
       notify: Reiniciar Nginx  # Usando handler para reinício condicional
 
@@ -651,7 +784,7 @@
       notify: Reiniciar serviços  # Aciona recarregamento se o arquivo mudar
       loop:
         - "somdomato-ergo.service"
-        - "somdomato-kiwiirc.service"  # Apenas se KiwiIRC precisar de serviço systemd
+        - "somdomato-kiwiirc.service"
         - "somdomato-webircgateway.service"
 
   handlers:

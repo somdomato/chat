@@ -3,7 +3,7 @@
 # Domínios
 domains:
   irc: "irc.somdomato.com"
-  # gamja: "gamja.somdomato.com"  # Comentado temporariamente
+  gamja: "gamja.somdomato.com"
   chat: "chat.somdomato.com"
 
 # Email para Let's Encrypt
@@ -13,8 +13,11 @@ letsencrypt_email: "sistematico@gmail.com"
 app_dirs:
   ergo: "/usr/share/ergo"
   kiwiirc: "/usr/share/kiwiirc"
-  # gamja: "/usr/share/gamja"  # Comentado temporariamente
+  gamja: "/usr/share/gamja"
   webircgateway: "/opt/webircgateway"
+
+# Diretório de backups
+backup_dir: "/var/backups/sdm-chat"
 
 # Usuários e grupos
 ergo_user: "ergo"
