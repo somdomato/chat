@@ -11,6 +11,76 @@ Infraestrutura de chat IRC completa usando Ergo, KiwiIRC e WebIRC Gateway.
 | Chat | [chat.somdomato.com](https://chat.somdomato.com) | Arquivos de configuração do bate-papo usando IRC (Ergo & KiwiIRC) |
 | [Podman](https://github.com/somdomato/podman) | - | Imagens e contêineres do [Podman](https://podman.io) para desenvolvimento local |
 
+## Desenvolvimento Local (Docker)
+
+Espelha o ambiente de produção (Oracle Linux 9 arm64) rodando em qualquer arquitetura (amd64/arm64).
+
+### Subir o ambiente
+
+```bash
+# Na pasta chat/
+docker compose -f docker/docker-compose.yml up -d --build
+```
+
+| Porta | Serviço |
+|-------|---------|
+| `9080` | KiwiIRC – `http://localhost:9080` |
+| `9081` | Gamja – `http://localhost:9081` |
+| `6667` | IRC plaintext (para clientes IRC diretos) |
+
+### Via Makefile (monorepo)
+
+```bash
+# Na raiz do monorepo (pasta sdm/)
+make vps2
+```
+
+### Credenciais de teste
+
+| Serviço | Credencial |
+|---------|-----------|
+| IRC oper | `/oper admin hackme` |
+
+### Configurações Docker
+
+| Arquivo | Função |
+|---------|--------|
+| `docker/ircd.docker.yaml` | Ergo sem TLS, WebSocket em `:8067` (KiwiIRC) e `:8097` (Gamja) |
+| `docker/webircgateway.docker.conf` | Upstream aponta para `ergo:8067` (Docker DNS) |
+| `docker/nginx.conf` | Porta 80 → KiwiIRC, porta 8080 → Gamja |
+| `docker/kiwiirc.client.json` | Usa `/webirc` relativo (funciona com qualquer porta) |
+| `docker/gamja.config.json` | `ws://localhost:9081/webirc` |
+
+Diferenças do Docker vs produção:
+
+| Aspecto | Docker | Produção |
+|---------|--------|----------|
+| TLS | Sem TLS (plaintext) | Let's Encrypt via Cloudflare |
+| Ergo porta 6697 | Não exposta | IRC com TLS |
+| WebIRC Gateway bind | `0.0.0.0:7778` | `127.0.0.1:7778` |
+| SELinux | Não aplicável | Configurado pelo Ansible |
+
+### Comandos Docker
+
+```bash
+# Logs de todos os serviços
+docker compose -f docker/docker-compose.yml logs -f
+
+# Logs de um serviço específico
+docker compose -f docker/docker-compose.yml logs -f ergo
+
+# Reiniciar serviço
+docker compose -f docker/docker-compose.yml restart ergo
+
+# Parar tudo
+docker compose -f docker/docker-compose.yml down
+
+# Apagar dados do Ergo (banco IRC) e recomeçar do zero
+docker compose -f docker/docker-compose.yml down -v
+```
+
+---
+
 ## 🎯 Arquitetura
 
 ### Fluxo de Comunicação

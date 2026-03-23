@@ -1,0 +1,37 @@
+# Nginx + KiwiIRC + Gamja
+# Stage 1: Build do Gamja (fonte em ansible/usr/share/gamja/)
+FROM node:22-alpine AS gamja-builder
+
+WORKDIR /gamja
+COPY ansible/usr/share/gamja/package*.json ./
+RUN npm ci
+
+COPY ansible/usr/share/gamja/ ./
+# Sobrescreve config.json com versão Docker
+COPY docker/gamja.config.json ./config.json
+RUN npm run build
+
+# Stage 2: Nginx com KiwiIRC + Gamja
+FROM nginx:alpine
+
+RUN apk add --no-cache curl unzip
+
+# Baixa KiwiIRC v1.7.1 (mesma versão do playbook Ansible)
+RUN curl -fsSL \
+    "https://github.com/kiwiirc/kiwiirc/releases/download/v1.7.1/kiwiirc-client_v1.7.1-2_any.zip" \
+    -o /tmp/kiwiirc.zip \
+    && mkdir -p /usr/share/kiwiirc \
+    && unzip /tmp/kiwiirc.zip -d /usr/share/kiwiirc/ \
+    && rm /tmp/kiwiirc.zip \
+    && apk del unzip curl
+
+# Configuração personalizada do KiwiIRC (Docker: sem URL hardcoded, usa /webirc relativo)
+COPY docker/kiwiirc.client.json /usr/share/kiwiirc/static/config.json
+
+# Gamja build
+COPY --from=gamja-builder /gamja/dist /usr/share/gamja/dist
+
+# Configuração do Nginx
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80 8080

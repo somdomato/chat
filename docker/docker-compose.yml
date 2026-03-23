@@ -1,0 +1,70 @@
+# VPS2 (chat) – teste standalone
+# Espelha Oracle Linux 9 arm64, roda em qualquer arquitetura.
+#
+# Uso:
+#   cd chat
+#   docker compose -f docker/docker-compose.yml up -d
+#
+# Portas expostas no host:
+#   9080 → KiwiIRC  (equivale a chat.somdomato.com)
+#   9081 → Gamja    (equivale a gamja.somdomato.com)
+#   6667 → IRC plaintext (para clientes IRC diretos)
+#
+# Credenciais de teste:
+#   IRC oper: /oper admin hackme
+
+services:
+  ergo:
+    container_name: chat-ergo
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ergo
+    ports:
+      - "6667:6667"
+    volumes:
+      - ergo-data:/var/lib/ergo
+    networks:
+      - chat-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "echo QUIT | nc -q1 localhost 6667 | grep -q 'irc.localhost'"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  webircgateway:
+    container_name: chat-webircgateway
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.webircgateway
+    depends_on:
+      ergo:
+        condition: service_healthy
+    networks:
+      - chat-network
+    restart: unless-stopped
+
+  nginx:
+    container_name: chat-nginx
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.nginx
+    ports:
+      - "9080:80"
+      - "9081:8080"
+    depends_on:
+      ergo:
+        condition: service_healthy
+    networks:
+      - chat-network
+    restart: unless-stopped
+
+volumes:
+  ergo-data:
+    name: sdm-ergo-data
+
+networks:
+  chat-network:
+    name: sdm-chat-network
+    driver: bridge
