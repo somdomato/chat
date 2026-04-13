@@ -1,6 +1,6 @@
 # Nginx + KiwiIRC + Gamja
 # Stage 1: Build do Gamja (fonte em ansible/usr/share/gamja/)
-FROM node:22-alpine AS gamja-builder
+FROM public.ecr.aws/docker/library/node:22-alpine AS gamja-builder
 
 WORKDIR /gamja
 COPY ansible/usr/share/gamja/package*.json ./
@@ -12,7 +12,7 @@ COPY docker/gamja.config.json ./config.json
 RUN npm run build
 
 # Stage 2: Nginx com KiwiIRC + Gamja
-FROM nginx:alpine
+FROM public.ecr.aws/docker/library/nginx:alpine
 
 RUN apk add --no-cache curl unzip
 
@@ -21,11 +21,18 @@ RUN curl -fsSL \
     "https://github.com/kiwiirc/kiwiirc/releases/download/v1.7.1/kiwiirc-client_v1.7.1-2_any.zip" \
     -o /tmp/kiwiirc.zip \
     && mkdir -p /usr/share/kiwiirc \
-    && unzip /tmp/kiwiirc.zip -d /usr/share/kiwiirc/ \
-    && rm /tmp/kiwiirc.zip \
+    && unzip /tmp/kiwiirc.zip -d /tmp/kiwiirc_extract/ \
+    && mv /tmp/kiwiirc_extract/kiwiirc_v1.7.1-2/* /usr/share/kiwiirc/ \
+    && rm -rf /tmp/kiwiirc.zip /tmp/kiwiirc_extract \
     && apk del unzip curl
 
+# Temas e assets customizados (sdm, sdm-dark, favicon etc.)
+# Remove o symlink config.json -> /etc/kiwiirc/client.json antes de copiar os arquivos
+RUN rm -f /usr/share/kiwiirc/static/config.json
+COPY ansible/usr/share/kiwiirc/static/ /usr/share/kiwiirc/static/
+
 # Configuração personalizada do KiwiIRC (Docker: sem URL hardcoded, usa /webirc relativo)
+RUN rm -f /usr/share/kiwiirc/static/config.json
 COPY docker/kiwiirc.client.json /usr/share/kiwiirc/static/config.json
 
 # Gamja build

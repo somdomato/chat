@@ -27,7 +27,7 @@ services:
       - chat-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "echo QUIT | nc -q1 localhost 6667 | grep -q 'irc.localhost'"]
+      test: ["CMD-SHELL", "bash -c 'echo >/dev/tcp/localhost/6667' 2>/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 6

@@ -1,6 +1,6 @@
 # Ergo IRC – multi-arch (amd64 / arm64)
 # Corresponde ao Ergo 2.16.0 em produção (Oracle Linux 9)
-FROM debian:bookworm-slim
+FROM public.ecr.aws/docker/library/debian:bookworm-slim
 
 ARG TARGETARCH
 ARG ERGO_VERSION=2.16.0

@@ -156,6 +156,19 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start {
     color: #fff !important;
 }
 
+/* Logo centralizado acima do campo de nickname */
+.kiwi-welcome-simple-form::before {
+    content: '';
+    display: block;
+    width: 96px;
+    height: 96px;
+    background-image: url('../../favicon.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    margin: 0 auto 16px auto;
+}
+
 .kiwi-header-option--active a {
     color: #e4e4e4 !important;
 }

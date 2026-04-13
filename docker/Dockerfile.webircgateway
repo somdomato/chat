@@ -1,5 +1,5 @@
 # WebIRC Gateway – compilado do fonte (multi-arch nativo)
-FROM golang:1.23-alpine AS builder
+FROM public.ecr.aws/docker/library/golang:1.23-alpine AS builder
 
 RUN apk add --no-cache git
 
@@ -8,7 +8,7 @@ WORKDIR /src
 RUN go build -o webircgateway .
 
 # Runtime
-FROM alpine:3.21
+FROM public.ecr.aws/docker/library/alpine:3.21
 RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /src/webircgateway /opt/webircgateway/webircgateway
