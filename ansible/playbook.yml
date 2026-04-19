@@ -641,21 +641,19 @@
         group: "{{ nginx_group }}"
         mode: '0755'
 
-    - name: Configurar pnpm para permitir build do irc-framework
+
+    - name: Instalar npm-run-all globalmente
       ansible.builtin.shell: |
-        pnpm config set --global onlyBuiltDependencies '["irc-framework"]'
-      environment:
-        PNPM_HOME: /usr/local/bin
+        npm install -g npm-run-all
       when: >
         refresh_apps and
         nodejs_final_versions.results[0].rc == 0 and
         nodejs_final_versions.results[1].rc == 0
 
-    - name: Instalar The Lounge via pnpm
+    - name: Instalar The Lounge via npm
       ansible.builtin.shell: |
-        pnpm add -g --config.onlyBuiltDependencies='["irc-framework"]' thelounge
+        npm install -g thelounge
       environment:
-        PNPM_HOME: /usr/local/bin
         THELOUNGE_HOME: /etc/thelounge
       when: >
         refresh_apps and
