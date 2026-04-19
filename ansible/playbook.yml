@@ -356,6 +356,11 @@
         msg: "Credenciais do Cloudflare inválidas. Verifique email e API key no vault."
       when: cloudflare_test.status != 200
 
+    - name: Verificar se certificado SSL já existe
+      ansible.builtin.stat:
+        path: "{{ ssl_cert_dir }}/{{ domains.irc }}/fullchain.pem"
+      register: cert_check
+
     - name: Obter certificados SSL para todos os domínios
       ansible.builtin.shell: |
         certbot certonly \
@@ -372,6 +377,7 @@
           -d {{ domains.lounge }}
       register: certbot_result
       failed_when: false  # Não falhar automaticamente para poder mostrar o erro
+      when: not cert_check.stat.exists
 
     - name: Mostrar resultado detalhado do certbot
       ansible.builtin.debug:
@@ -379,12 +385,7 @@
           - "Return code: {{ certbot_result.rc }}"
           - "STDOUT: {{ certbot_result.stdout }}"
           - "STDERR: {{ certbot_result.stderr }}"
-      when: certbot_result.rc != 0
-
-    - name: Verificar se certificados foram criados
-      ansible.builtin.stat:
-        path: "{{ ssl_cert_dir }}/{{ domains.irc }}/fullchain.pem"
-      register: cert_check
+      when: not cert_check.stat.exists and certbot_result.rc != 0
 
     - name: Falhar se certificados não foram obtidos
       ansible.builtin.fail:
@@ -393,7 +394,7 @@
           certbot rc={{ certbot_result.rc }}
           stderr={{ certbot_result.stderr | default('') }}
           Para debug: ssh root@ananke -p 2200 && certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini -d {{ domains.irc }} --dry-run -v
-      when: not cert_check.stat.exists
+      when: not cert_check.stat.exists and not (cert_check.stat.exists | default(false))
 
     - name: Verificar se destinos dos links simbólicos são diretórios
       ansible.builtin.stat:
@@ -652,7 +653,7 @@
 
     - name: Instalar The Lounge via pnpm
       ansible.builtin.shell: |
-        pnpm add -g thelounge
+        pnpm add -g --config.onlyBuiltDependencies='["irc-framework"]' thelounge
       environment:
         PNPM_HOME: /usr/local/bin
         THELOUNGE_HOME: /etc/thelounge
