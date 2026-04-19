@@ -8,6 +8,7 @@ logs/
 # Arquivos sensíveis do Ansible
 ansible/.vault_pass
 ansible/group_vars/vault.yml.bak
+.ansible/**
 
 # Certificados e chaves
 *.pem
@@ -35,6 +36,3 @@ Thumbs.db
 *.swo
 working/
 scripts/legacy/
-
-# ansible
-.ansible/**
