@@ -1,6 +1,6 @@
 ---
 
-- name: Preparar o ambiente para o Ergo, KiwiIRC e WebIRC Gateway
+- name: Preparar o ambiente para o Ergo, KiwiIRC, The Lounge e WebIRC Gateway
   hosts: all
   become: true
   remote_user: "{{ ansible_user }}"
@@ -42,6 +42,7 @@
         - { path: "/etc/nginx/sites.d", name: "nginx-sites" }
         - { path: "/etc/kiwiirc", name: "kiwiirc-config" }
         - { path: "{{ app_dirs.kiwiirc }}", name: "kiwiirc-app" }
+        - { path: "/etc/thelounge", name: "thelounge-config" }
       loop_control:
         label: "{{ item.name }}"
       failed_when: false
@@ -259,6 +260,13 @@
         state: present
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
 
+    - name: Configurar contextos SELinux para diretórios do The Lounge
+      community.general.sefcontext:
+        target: "{{ app_dirs.thelounge }}(/.*)?"
+        setype: httpd_sys_content_t
+        state: present
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
     - name: Configurar contexto SELinux para executáveis
       community.general.sefcontext:
         target: "{{ item }}"
@@ -291,6 +299,7 @@
         - "{{ app_dirs.kiwiirc }}"
         - "{{ app_dirs.gamja }}"
         - "{{ app_dirs.webircgateway }}"
+        - "{{ app_dirs.thelounge }}"
       register: app_dirs_stat
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
 
@@ -359,7 +368,8 @@
           --verbose \
           -d {{ domains.irc }} \
           -d {{ domains.chat }} \
-          -d {{ domains.gamja }}
+          -d {{ domains.gamja }} \
+          -d {{ domains.lounge }}
       register: certbot_result
       failed_when: false  # Não falhar automaticamente para poder mostrar o erro
 
@@ -391,6 +401,7 @@
       loop:
         - "{{ domains.chat }}"
         - "{{ domains.gamja }}"
+        - "{{ domains.lounge }}"
       register: symlink_dest_check
       when: cert_check.stat.exists
 
@@ -418,6 +429,14 @@
       ansible.builtin.file:
         src: "{{ ssl_cert_dir }}/{{ domains.irc }}"
         dest: "{{ ssl_cert_dir }}/{{ domains.gamja }}"
+        state: link
+        force: yes
+      when: cert_check.stat.exists
+
+    - name: Criar links simbólicos dos certificados para lounge.somdomato.com
+      ansible.builtin.file:
+        src: "{{ ssl_cert_dir }}/{{ domains.irc }}"
+        dest: "{{ ssl_cert_dir }}/{{ domains.lounge }}"
         state: link
         force: yes
       when: cert_check.stat.exists
@@ -602,6 +621,62 @@
         nodejs_final_versions.results[1].rc == 0
       register: gamja_build_result
 
+    # Instalação do The Lounge via pnpm
+    - name: Instalar pnpm via corepack
+      ansible.builtin.shell: |
+        corepack enable
+        corepack prepare pnpm@latest --activate
+      args:
+        creates: /usr/local/bin/pnpm
+      when: >
+        nodejs_final_versions.results[0].rc == 0 and
+        nodejs_final_versions.results[1].rc == 0
+
+    - name: Criar diretório do The Lounge
+      ansible.builtin.file:
+        path: "{{ app_dirs.thelounge }}"
+        state: directory
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0755'
+
+    - name: Configurar pnpm para permitir build do irc-framework
+      ansible.builtin.shell: |
+        pnpm config set --global onlyBuiltDependencies '["irc-framework"]'
+      environment:
+        PNPM_HOME: /usr/local/bin
+      when: >
+        refresh_apps and
+        nodejs_final_versions.results[0].rc == 0 and
+        nodejs_final_versions.results[1].rc == 0
+
+    - name: Instalar The Lounge via pnpm
+      ansible.builtin.shell: |
+        pnpm add -g thelounge
+      environment:
+        PNPM_HOME: /usr/local/bin
+        THELOUNGE_HOME: /etc/thelounge
+      when: >
+        refresh_apps and
+        nodejs_final_versions.results[0].rc == 0 and
+        nodejs_final_versions.results[1].rc == 0
+
+    - name: Criar diretório de configuração do The Lounge
+      ansible.builtin.file:
+        path: /etc/thelounge
+        state: directory
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0755'
+
+    - name: Copiar arquivo de configuração do The Lounge
+      ansible.builtin.copy:
+        src: "etc/thelounge/config.js"
+        dest: "/etc/thelounge/config.js"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0644'
+
     - name: Criar diretório de configuração do kiwiirc
       ansible.builtin.file:
         path: /etc/kiwiirc
@@ -650,6 +725,14 @@
         recurse: true
         state: directory
 
+    - name: Alterar propriedade do diretório thelounge
+      ansible.builtin.file:
+        path: "{{ app_dirs.thelounge }}"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        recurse: true
+        state: directory
+
     - name: Aplicar contextos SELinux nos diretórios de aplicação
       ansible.builtin.command: "restorecon -Rv {{ item }}"
       loop:
@@ -657,6 +740,7 @@
         - "{{ app_dirs.kiwiirc }}"
         - "{{ app_dirs.gamja }}"
         - "{{ app_dirs.webircgateway }}"
+        - "{{ app_dirs.thelounge }}"
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
       changed_when: true
 
@@ -672,6 +756,7 @@
         - "50-{{ domains.irc }}.conf"
         - "51-{{ domains.gamja }}.conf"
         - "52-{{ domains.chat }}.conf"
+        - "53-{{ domains.lounge }}.conf"
       notify: Reiniciar Nginx  # Usando handler para reinício condicional
 
     - name: Copiar serviços systemd
@@ -686,6 +771,7 @@
         - "somdomato-ergo.service"
         - "somdomato-kiwiirc.service"
         - "somdomato-webircgateway.service"
+        - "somdomato-thelounge.service"
 
   handlers:
     - name: Mostrar resultado do certbot
@@ -700,6 +786,7 @@
       loop:
         - "somdomato-ergo.service"
         - "somdomato-webircgateway.service"
+        - "somdomato-thelounge.service"
         # - "somdomato-kiwiirc.service"  # Apenas se necessário
 
     - name: Testar configuração do Nginx

@@ -6,8 +6,9 @@
 #   docker compose -f docker/docker-compose.yml up -d
 #
 # Portas expostas no host:
-#   9080 → KiwiIRC  (equivale a chat.somdomato.com)
-#   9081 → Gamja    (equivale a gamja.somdomato.com)
+#   9080 → KiwiIRC    (equivale a chat.somdomato.com)
+#   9081 → Gamja      (equivale a gamja.somdomato.com)
+#   9082 → The Lounge (equivale a lounge.somdomato.com)
 #   6667 → IRC plaintext (para clientes IRC diretos)
 #
 # Credenciais de teste:
@@ -45,6 +46,18 @@ services:
       - chat-network
     restart: unless-stopped
 
+  thelounge:
+    container_name: chat-thelounge
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.thelounge
+    depends_on:
+      ergo:
+        condition: service_healthy
+    networks:
+      - chat-network
+    restart: unless-stopped
+
   nginx:
     container_name: chat-nginx
     build:
@@ -53,6 +66,7 @@ services:
     ports:
       - "9080:80"
       - "9081:8080"
+      - "9082:8090"
     depends_on:
       ergo:
         condition: service_healthy

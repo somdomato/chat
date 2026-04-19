@@ -1,0 +1,25 @@
+[Unit]
+Description=The Lounge - Web IRC Client (Som do Mato)
+Documentation=https://thelounge.chat/docs
+After=network.target somdomato-ergo.service
+
+[Service]
+Type=simple
+User=nginx
+Group=nginx
+
+Environment=THELOUNGE_HOME=/etc/thelounge
+
+ExecStart=/usr/local/bin/thelounge start
+
+Restart=on-failure
+RestartSec=10s
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/etc/thelounge
+
+[Install]
+WantedBy=multi-user.target
