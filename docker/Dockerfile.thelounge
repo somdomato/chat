@@ -1,0 +1,24 @@
+# The Lounge – cliente web IRC
+# Roda como servidor Node.js na porta 9000
+FROM public.ecr.aws/docker/library/node:22-alpine
+
+# Instalar pnpm via corepack
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Instalar The Lounge globalmente via pnpm
+RUN pnpm add -g thelounge
+
+# Criar diretório de dados
+RUN mkdir -p /var/opt/thelounge && \
+    chown -R node:node /var/opt/thelounge
+
+ENV THELOUNGE_HOME=/var/opt/thelounge
+
+# Copiar configuração customizada
+COPY docker/thelounge.config.js /var/opt/thelounge/config.js
+
+USER node
+
+EXPOSE 9000
+
+CMD ["thelounge", "start"]

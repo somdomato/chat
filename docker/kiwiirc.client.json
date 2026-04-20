@@ -3,7 +3,7 @@
     "startupScreen": "welcome",
     "hide_advanced": true,
     "warnOnExit": false,
-    "kiwiServer": "/webirc",
+    "kiwiServer": "/webirc/kiwiirc",
     "restricted": true,
     "theme": "SDM-Dark",
     "themes": [
@@ -12,6 +12,7 @@
     ],
     "startupOptions": {
         "channel": "#somdomato",
-        "nick": "{sdm_?}"
+        "nick": "{sdm_?}",
+        "showChannel": false
     }
 }

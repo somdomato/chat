@@ -1,9 +1,13 @@
 ---
 
-- name: Preparar o ambiente para o Ergo, KiwiIRC e WebIRC Gateway
+- name: Preparar o ambiente para o Ergo, KiwiIRC, The Lounge e WebIRC Gateway
   hosts: all
   become: true
   remote_user: "{{ ansible_user }}"
+  gather_subset:
+    - '!hardware'
+    - '!facter'
+    - '!ohai'
   vars_files:
     - group_vars/vault.yml
 
@@ -28,40 +32,19 @@
         group: root
         mode: '0700'
 
-    - name: Fazer backup das configurações do Nginx (sites.d)
+    - name: Fazer backup das configurações existentes
       ansible.builtin.archive:
-        path: /etc/nginx/sites.d
-        dest: "{{ backup_dir }}/{{ backup_timestamp }}/nginx-sites.tar.gz"
+        path: "{{ item.path }}"
+        dest: "{{ backup_dir }}/{{ backup_timestamp }}/{{ item.name }}.tar.gz"
         format: gz
-      failed_when: false
-
-    - name: Fazer backup da configuração do KiwiIRC
-      ansible.builtin.archive:
-        path: /etc/kiwiirc
-        dest: "{{ backup_dir }}/{{ backup_timestamp }}/kiwiirc-config.tar.gz"
-        format: gz
-      failed_when: false
-
-    - name: Fazer backup dos serviços systemd do SDM
-      ansible.builtin.shell: >
-        tar czf {{ backup_dir }}/{{ backup_timestamp }}/systemd-services.tar.gz
-        $(ls /etc/systemd/system/somdomato-*.service
-        /etc/systemd/system/ergo.service
-        /etc/systemd/system/webircgateway.service 2>/dev/null) 2>/dev/null || true
-      changed_when: false
-
-    - name: Fazer backup das configurações de renovação do Let's Encrypt
-      ansible.builtin.archive:
-        path: /etc/letsencrypt/renewal
-        dest: "{{ backup_dir }}/{{ backup_timestamp }}/letsencrypt-renewal.tar.gz"
-        format: gz
-      failed_when: false
-
-    - name: Fazer backup dos certificados TLS (live)
-      ansible.builtin.archive:
-        path: /etc/letsencrypt/live
-        dest: "{{ backup_dir }}/{{ backup_timestamp }}/letsencrypt-live.tar.gz"
-        format: gz
+        exclude_path: "{{ item.exclude | default(omit) }}"
+      loop:
+        - { path: "/etc/nginx/sites.d", name: "nginx-sites" }
+        - { path: "/etc/kiwiirc", name: "kiwiirc-config" }
+        - { path: "{{ app_dirs.kiwiirc }}", name: "kiwiirc-app" }
+        - { path: "/etc/thelounge", name: "thelounge-config" }
+      loop_control:
+        label: "{{ item.name }}"
       failed_when: false
 
     - name: Fazer backup do diretório do Ergo
@@ -73,13 +56,6 @@
           - "{{ app_dirs.ergo }}/languages"
       failed_when: false
 
-    - name: Fazer backup do diretório do KiwiIRC
-      ansible.builtin.archive:
-        path: "{{ app_dirs.kiwiirc }}"
-        dest: "{{ backup_dir }}/{{ backup_timestamp }}/kiwiirc-app.tar.gz"
-        format: gz
-      failed_when: false
-
     - name: Fazer backup do diretório do Gamja
       ansible.builtin.archive:
         path: "{{ app_dirs.gamja }}"
@@ -89,17 +65,25 @@
           - "{{ app_dirs.gamja }}/node_modules"
       failed_when: false
 
-    - name: Listar arquivos de backup criados
-      ansible.builtin.find:
-        paths: "{{ backup_dir }}/{{ backup_timestamp }}"
-        patterns: "*.tar.gz"
-      register: backup_files
+    - name: Fazer backup dos serviços systemd do SDM
+      ansible.builtin.shell: >
+        tar czf {{ backup_dir }}/{{ backup_timestamp }}/systemd-services.tar.gz
+        $(ls /etc/systemd/system/somdomato-*.service
+        /etc/systemd/system/ergo.service
+        /etc/systemd/system/webircgateway.service 2>/dev/null) 2>/dev/null || true
+      changed_when: false
 
-    - name: Mostrar resumo dos backups
-      ansible.builtin.debug:
-        msg:
-          - "Backups salvos em: {{ backup_dir }}/{{ backup_timestamp }}/"
-          - "Arquivos: {{ backup_files.files | map(attribute='path') | map('basename') | list }}"
+    - name: Fazer backup das configurações de renovação e certificados do Let's Encrypt
+      ansible.builtin.archive:
+        path: "{{ item.path }}"
+        dest: "{{ backup_dir }}/{{ backup_timestamp }}/{{ item.name }}.tar.gz"
+        format: gz
+      loop:
+        - { path: "/etc/letsencrypt/renewal", name: "letsencrypt-renewal" }
+        - { path: "/etc/letsencrypt/live", name: "letsencrypt-live" }
+      loop_control:
+        label: "{{ item.name }}"
+      failed_when: false
 
     # ===== ATUALIZAÇÃO DE CACHE DE PACOTES =====
     - name: Atualizar cache de pacotes (Debian/Ubuntu)
@@ -132,19 +116,6 @@
       failed_when: false
       changed_when: false
 
-    - name: Mostrar status atual do Node.js/npm
-      ansible.builtin.debug:
-        msg:
-          - "Node.js instalado: {{ 'Sim' if nodejs_check.rc == 0 else 'Não' }}"
-          - "npm instalado: {{ 'Sim' if npm_check.rc == 0 else 'Não' }}"
-          - "Versão Node.js: {{ nodejs_check.stdout if nodejs_check.rc == 0 else 'N/A' }}"
-          - "Versão npm: {{ npm_check.stdout if npm_check.rc == 0 else 'N/A' }}"
-
-    - name: Pular instalação do Node.js se já estiver funcionando
-      ansible.builtin.debug:
-        msg: "Node.js e npm já estão instalados e funcionando. Pulando instalação."
-      when: nodejs_check.rc == 0 and npm_check.rc == 0
-
     - name: Remover pacotes npm/nodejs conflitantes do sistema (apenas se necessário)
       ansible.builtin.package:
         name:
@@ -161,7 +132,7 @@
         autoclean: true
       when: is_debian_family
 
-    - name: Instalar dependências básicas (Debian/Ubuntu)
+    - name: Instalar dependências básicas e certbot (Debian/Ubuntu)
       ansible.builtin.package:
         name:
           - curl
@@ -170,10 +141,12 @@
           - apt-transport-https
           - software-properties-common
           - unzip
+          - certbot
+          - python3-certbot-dns-cloudflare
         state: present
       when: is_debian_family
 
-    - name: Instalar dependências básicas (Oracle Linux/RHEL/Rocky)
+    - name: Instalar dependências básicas e certbot (Oracle Linux/RHEL/Rocky)
       ansible.builtin.package:
         name:
           - curl
@@ -183,46 +156,15 @@
           - policycoreutils
           - policycoreutils-python-utils
           - selinux-policy-targeted
-        state: present
-      when: is_rhel_family
-
-    - name: Instalar certbot (Debian/Ubuntu)
-      ansible.builtin.package:
-        name:
-          - certbot
-          - python3-certbot-dns-cloudflare
-        state: present
-      when: is_debian_family
-
-    - name: Instalar certbot (Oracle Linux/RHEL/Rocky)
-      ansible.builtin.package:
-        name:
           - certbot
           - python3-certbot-dns-cloudflare
         state: present
       when: is_rhel_family
 
-    - name: Verificar versão do módulo cloudflare instalado
-      ansible.builtin.shell: python3 -c "import cloudflare; print(cloudflare.__version__)"
-      register: cloudflare_version
-      failed_when: false
-      changed_when: false
-
-    - name: Mostrar versão do módulo cloudflare
-      ansible.builtin.debug:
-        msg: "Módulo cloudflare versão: {{ cloudflare_version.stdout if cloudflare_version.rc == 0 else 'Erro ao verificar' }}"
-
-    - name: Instalar nginx (Debian/Ubuntu)
+    - name: Instalar nginx
       ansible.builtin.package:
         name: nginx
         state: present
-      when: is_debian_family
-
-    - name: Instalar nginx (Oracle Linux/RHEL/Rocky)
-      ansible.builtin.package:
-        name: nginx
-        state: present
-      when: is_rhel_family
 
     # Node.js installation - compatível com múltiplas distros
 
@@ -318,6 +260,13 @@
         state: present
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
 
+    - name: Configurar contextos SELinux para diretórios do The Lounge
+      community.general.sefcontext:
+        target: "{{ app_dirs.thelounge }}(/.*)?"
+        setype: httpd_sys_content_t
+        state: present
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
     - name: Configurar contexto SELinux para executáveis
       community.general.sefcontext:
         target: "{{ item }}"
@@ -350,6 +299,7 @@
         - "{{ app_dirs.kiwiirc }}"
         - "{{ app_dirs.gamja }}"
         - "{{ app_dirs.webircgateway }}"
+        - "{{ app_dirs.thelounge }}"
       register: app_dirs_stat
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
 
@@ -389,15 +339,6 @@
         mode: '0600'
       no_log: true  # Não mostra o conteúdo no log
 
-    - name: Verificar se o arquivo de credenciais foi criado
-      ansible.builtin.stat:
-        path: /etc/letsencrypt/cloudflare.ini
-      register: cloudflare_creds_file
-
-    - name: Mostrar status do arquivo de credenciais
-      ansible.builtin.debug:
-        msg: "Arquivo de credenciais: {{ 'Criado' if cloudflare_creds_file.stat.exists else 'Erro na criação' }}"
-
     - name: Testar conectividade com Cloudflare API (modo legacy)
       ansible.builtin.uri:
         url: "https://api.cloudflare.com/client/v4/user"
@@ -410,17 +351,15 @@
       register: cloudflare_test
       no_log: true
 
-    - name: Mostrar resultado do teste da API Cloudflare
-      ansible.builtin.debug:
-        msg:
-          - "Status da API Cloudflare: {{ cloudflare_test.status }}"
-          - "Credenciais válidas: {{ 'Sim' if cloudflare_test.status == 200 else 'Não' }}"
-          - "Email: {{ cloudflare_email }}"
-
     - name: Falhar se as credenciais do Cloudflare forem inválidas
       ansible.builtin.fail:
         msg: "Credenciais do Cloudflare inválidas. Verifique email e API key no vault."
       when: cloudflare_test.status != 200
+
+    - name: Verificar se certificado SSL já existe
+      ansible.builtin.stat:
+        path: "{{ ssl_cert_dir }}/{{ domains.irc }}/fullchain.pem"
+      register: cert_check
 
     - name: Obter certificados SSL para todos os domínios
       ansible.builtin.shell: |
@@ -434,9 +373,11 @@
           --verbose \
           -d {{ domains.irc }} \
           -d {{ domains.chat }} \
-          -d {{ domains.gamja }}
+          -d {{ domains.gamja }} \
+          -d {{ domains.lounge }}
       register: certbot_result
       failed_when: false  # Não falhar automaticamente para poder mostrar o erro
+      when: not cert_check.stat.exists
 
     - name: Mostrar resultado detalhado do certbot
       ansible.builtin.debug:
@@ -444,49 +385,16 @@
           - "Return code: {{ certbot_result.rc }}"
           - "STDOUT: {{ certbot_result.stdout }}"
           - "STDERR: {{ certbot_result.stderr }}"
-      when: certbot_result.rc != 0
-
-    - name: Aguardar um pouco antes de verificar certificados
-      ansible.builtin.pause:
-        seconds: 3
-
-    - name: Verificar se certificados foram criados
-      ansible.builtin.stat:
-        path: "{{ ssl_cert_dir }}/{{ domains.irc }}/fullchain.pem"
-      register: cert_check
-
-    - name: Mostrar resultado da verificação de certificados
-      ansible.builtin.debug:
-        msg:
-          - "Certificado encontrado: {{ cert_check.stat.exists }}"
-          - "Caminho: {{ ssl_cert_dir }}/{{ domains.irc }}/fullchain.pem"
-          - "Tamanho: {{ cert_check.stat.size | default('N/A') }} bytes"
-
-    - name: Listar diretório de certificados se não encontrado
-      ansible.builtin.command: ls -la {{ ssl_cert_dir }}/
-      register: cert_dir_listing
-      when: not cert_check.stat.exists
-      failed_when: false
-
-    - name: Mostrar conteúdo do diretório de certificados
-      ansible.builtin.debug:
-        msg: "{{ cert_dir_listing.stdout_lines }}"
-      when: not cert_check.stat.exists and cert_dir_listing.stdout_lines is defined
-
-    - name: Mostrar instruções para debug manual se certificados falharam
-      ansible.builtin.debug:
-        msg:
-          - "❌ Falha na obtenção de certificados. Para debug manual:"
-          - "🔍 ssh root@ananke -p 2200"
-          - "🔍 cat /etc/letsencrypt/cloudflare.ini"
-          - "🔍 certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini -d {{ domains.irc }} --dry-run -v"
-          - "🔍 tail -f /var/log/letsencrypt/letsencrypt.log"
-      when: not cert_check.stat.exists
+      when: not cert_check.stat.exists and certbot_result.rc != 0
 
     - name: Falhar se certificados não foram obtidos
       ansible.builtin.fail:
-        msg: "Falha na obtenção de certificados SSL. Verifique as credenciais do Cloudflare e execute debug manual."
-      when: not cert_check.stat.exists
+        msg: |
+          Falha na obtenção de certificados SSL.
+          certbot rc={{ certbot_result.rc }}
+          stderr={{ certbot_result.stderr | default('') }}
+          Para debug: ssh root@ananke -p 2200 && certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini -d {{ domains.irc }} --dry-run -v
+      when: not cert_check.stat.exists and not (cert_check.stat.exists | default(false))
 
     - name: Verificar se destinos dos links simbólicos são diretórios
       ansible.builtin.stat:
@@ -494,6 +402,7 @@
       loop:
         - "{{ domains.chat }}"
         - "{{ domains.gamja }}"
+        - "{{ domains.lounge }}"
       register: symlink_dest_check
       when: cert_check.stat.exists
 
@@ -525,19 +434,13 @@
         force: yes
       when: cert_check.stat.exists
 
-    - name: Verificar se todos os links foram criados
-      ansible.builtin.stat:
-        path: "{{ ssl_cert_dir }}/{{ item }}/fullchain.pem"
-      loop:
-        - "{{ domains.irc }}"
-        - "{{ domains.chat }}"
-        - "{{ domains.gamja }}"
-      register: all_domain_certs
-
-    - name: Mostrar status dos certificados por domínio
-      ansible.builtin.debug:
-        msg: "Certificado {{ item.item }}: {{ 'Disponível' if item.stat.exists else 'Não encontrado' }}"
-      loop: "{{ all_domain_certs.results }}"
+    - name: Criar links simbólicos dos certificados para lounge.somdomato.com
+      ansible.builtin.file:
+        src: "{{ ssl_cert_dir }}/{{ domains.irc }}"
+        dest: "{{ ssl_cert_dir }}/{{ domains.lounge }}"
+        state: link
+        force: yes
+      when: cert_check.stat.exists
 
     - name: "Garante que o grupo exista: {{ ergo_group }}"
       ansible.builtin.group:
@@ -683,26 +586,9 @@
       changed_when: false
       failed_when: false
 
-    - name: Mostrar versões finais do Node.js e npm
-      ansible.builtin.debug:
-        msg: 
-          - "Node.js: {{ nodejs_final_versions.results[0].stdout if nodejs_final_versions.results[0].rc == 0 
-                       else 'ERRO: ' + nodejs_final_versions.results[0].stderr }}"
-          - "npm: {{ nodejs_final_versions.results[1].stdout if nodejs_final_versions.results[1].rc == 0 
-                    else 'ERRO: ' + nodejs_final_versions.results[1].stderr }}"
-
     - name: Falhar se Node.js ou npm não estiver funcionando
       ansible.builtin.fail:
-        msg: "Node.js ou npm não está funcionando corretamente. Verifique a instalação."
-      when: nodejs_final_versions.results[0].rc != 0 or nodejs_final_versions.results[1].rc != 0
-
-    - name: Mostrar instruções para instalação manual do Node.js
-      ansible.builtin.debug:
-        msg:
-          - "⚠️  Node.js/npm não está funcionando. Para instalar manualmente:"
-          - "🔧 Via snap: snap install node --classic"
-          - "🔧 Via nvm: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash && nvm install node"
-          - "📝 Depois execute novamente o playbook"
+        msg: "Node.js ou npm não está funcionando. Via snap: snap install node --classic | Via nvm: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash && nvm install node"
       when: nodejs_final_versions.results[0].rc != 0 or nodejs_final_versions.results[1].rc != 0
 
     - name: Criar diretório do Gamja
@@ -736,12 +622,59 @@
         nodejs_final_versions.results[1].rc == 0
       register: gamja_build_result
 
-    - name: Mostrar resultado do build do Gamja
-      ansible.builtin.debug:
-        msg:
-          - "Build Gamja: {{ 'OK' if gamja_build_result.rc == 0 else 'FALHOU' }}"
-          - "{{ gamja_build_result.stdout_lines | default([]) | last | default('') }}"
-      when: gamja_build_result is defined and not gamja_build_result.skipped | default(false)
+    # Instalação do The Lounge via pnpm
+    - name: Instalar pnpm via corepack
+      ansible.builtin.shell: |
+        corepack enable
+        corepack prepare pnpm@latest --activate
+      args:
+        creates: /usr/local/bin/pnpm
+      when: >
+        nodejs_final_versions.results[0].rc == 0 and
+        nodejs_final_versions.results[1].rc == 0
+
+    - name: Criar diretório do The Lounge
+      ansible.builtin.file:
+        path: "{{ app_dirs.thelounge }}"
+        state: directory
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0755'
+
+
+    - name: Instalar npm-run-all globalmente
+      ansible.builtin.shell: |
+        npm install -g npm-run-all
+      when: >
+        refresh_apps and
+        nodejs_final_versions.results[0].rc == 0 and
+        nodejs_final_versions.results[1].rc == 0
+
+    - name: Instalar The Lounge via npm
+      ansible.builtin.shell: |
+        npm install -g thelounge
+      environment:
+        THELOUNGE_HOME: /etc/thelounge
+      when: >
+        refresh_apps and
+        nodejs_final_versions.results[0].rc == 0 and
+        nodejs_final_versions.results[1].rc == 0
+
+    - name: Criar diretório de configuração do The Lounge
+      ansible.builtin.file:
+        path: /etc/thelounge
+        state: directory
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0755'
+
+    - name: Copiar arquivo de configuração do The Lounge
+      ansible.builtin.copy:
+        src: "etc/thelounge/config.js"
+        dest: "/etc/thelounge/config.js"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0644'
 
     - name: Criar diretório de configuração do kiwiirc
       ansible.builtin.file:
@@ -791,6 +724,14 @@
         recurse: true
         state: directory
 
+    - name: Alterar propriedade do diretório thelounge
+      ansible.builtin.file:
+        path: "{{ app_dirs.thelounge }}"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        recurse: true
+        state: directory
+
     - name: Aplicar contextos SELinux nos diretórios de aplicação
       ansible.builtin.command: "restorecon -Rv {{ item }}"
       loop:
@@ -798,6 +739,7 @@
         - "{{ app_dirs.kiwiirc }}"
         - "{{ app_dirs.gamja }}"
         - "{{ app_dirs.webircgateway }}"
+        - "{{ app_dirs.thelounge }}"
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
       changed_when: true
 
@@ -813,6 +755,7 @@
         - "50-{{ domains.irc }}.conf"
         - "51-{{ domains.gamja }}.conf"
         - "52-{{ domains.chat }}.conf"
+        - "53-{{ domains.lounge }}.conf"
       notify: Reiniciar Nginx  # Usando handler para reinício condicional
 
     - name: Copiar serviços systemd
@@ -827,6 +770,7 @@
         - "somdomato-ergo.service"
         - "somdomato-kiwiirc.service"
         - "somdomato-webircgateway.service"
+        - "somdomato-thelounge.service"
 
   handlers:
     - name: Mostrar resultado do certbot
@@ -841,30 +785,33 @@
       loop:
         - "somdomato-ergo.service"
         - "somdomato-webircgateway.service"
+        - "somdomato-thelounge.service"
         # - "somdomato-kiwiirc.service"  # Apenas se necessário
 
-    - name: Reiniciar Nginx
-      block:
-        - name: Testar configuração do Nginx
-          ansible.builtin.command: nginx -t
-          register: nginx_test
-          failed_when: false
+    - name: Testar configuração do Nginx
+      ansible.builtin.command: nginx -t
+      register: nginx_test
+      failed_when: false
+      listen: Reiniciar Nginx
 
-        - name: Mostrar erro de configuração do Nginx se houver
-          ansible.builtin.debug:
-            msg:
-              - "❌ Erro na configuração do Nginx:"
-              - "{{ nginx_test.stderr }}"
-              - "🔧 Verifique os certificados SSL em /etc/letsencrypt/live/"
-          when: nginx_test.rc != 0
+    - name: Mostrar erro de configuração do Nginx se houver
+      ansible.builtin.debug:
+        msg:
+          - "❌ Erro na configuração do Nginx:"
+          - "{{ nginx_test.stderr }}"
+          - "🔧 Verifique os certificados SSL em /etc/letsencrypt/live/"
+      when: nginx_test.rc != 0
+      listen: Reiniciar Nginx
 
-        - name: Reiniciar Nginx apenas se configuração estiver válida
-          ansible.builtin.systemd:
-            name: nginx
-            state: restarted
-          when: nginx_test.rc == 0
+    - name: Reiniciar Nginx apenas se configuração estiver válida
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+      when: nginx_test.rc == 0
+      listen: Reiniciar Nginx
 
-        - name: Falhar se configuração do Nginx estiver inválida
-          ansible.builtin.fail:
-            msg: "Configuração do Nginx inválida. Corrija os erros antes de prosseguir."
-          when: nginx_test.rc != 0
+    - name: Falhar se configuração do Nginx estiver inválida
+      ansible.builtin.fail:
+        msg: "Configuração do Nginx inválida. Corrija os erros antes de prosseguir."
+      when: nginx_test.rc != 0
+      listen: Reiniciar Nginx

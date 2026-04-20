@@ -4,12 +4,13 @@
 
 Infraestrutura de chat IRC completa usando Ergo, KiwiIRC e WebIRC Gateway.
 
-| Sistema | URL | Descrição |
-| :--- | :---: | ---: |
-| [Site](https://github.com/somdomato/somdomato) | [somdomato.com](https://somdomato.com) | |
-| [Stream](https://github.com/somdomato/stream) | [radio.somdomato.com](https://radio.somdomato.com) | Arquivos de configuração do Icecast e Liquidsoap |
-| Chat | [chat.somdomato.com](https://chat.somdomato.com) | Arquivos de configuração do bate-papo usando IRC (Ergo & KiwiIRC) |
-| [Podman](https://github.com/somdomato/podman) | - | Imagens e contêineres do [Podman](https://podman.io) para desenvolvimento local |
+| sistema | url | descrição |
+| :--- | ---: | ---: |
+| [Site](https://github.com/somdomato/somdomato) | [somdomato.com](https://somdomato.com) | Web Rádio Som do Mato |
+| [Stream](https://github.com/somdomato/stream) | [radio.somdomato.com](https://radio.somdomato.com) | IceCast2 & LiquidSoap |
+| [Chat](https://github.com/somdomato/chat) | [chat.somdomato.com](https://chat.somdomato.com) | Ergo IRC Server & Gamja IRC Web Client |
+| [Mobile](https://github.com/somdomato/mobile) |  | Aplicativos iOS e Android da rádio |
+| [Infra](https://github.com/somdomato/infra) |  | Imagens e contêineres do Docker e Ansible Playbooks para desenvolvimento local |
 
 ## Desenvolvimento Local (Docker)
 
@@ -19,7 +20,7 @@ Espelha o ambiente de produção (Oracle Linux 9 arm64) rodando em qualquer arqu
 
 ```bash
 # Na pasta chat/
-docker compose -f docker/docker-compose.yml up -d --build
+podman compose -f docker/docker-compose.yml up -d --build
 ```
 
 | Porta | Serviço |

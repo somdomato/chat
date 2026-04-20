@@ -1,56 +1,194 @@
 @import '../common/base.css';
 
-:root{
-    --brand-primary: #256d55;
+:root {
+    --brand-primary: #42b992;
     --brand-primary-hover: #5ec9a6;
     --brand-midtone: #2b2b2b;
     --brand-darktone: #969696;
     --brand-default-bg: #1e1e1e;
-    --brand-default-fg: #ababab;
+    --brand-default-fg: #c0c0c0;
     --brand-notice: #f6c358;
     --brand-warning: #fcb46e;
-    --brand-error: #712c2f;
+    --brand-error: #c44040;
     --comp-workspace-before-bg: var(--brand-primary);
     --comp-bg-kiwi-workspace--disconnected-after-bg: var(--brand-error);
     --comp-header-bg: var(--brand-default-bg);
     --comp-header-name-fg: var(--brand-default-fg);
     --comp-header-option-active-fg: #f1f1f1;
     --comp-header-option-active-bg: var(--brand-primary);
-    --comp-statebrowser-fg: #ababab;
+    --comp-statebrowser-fg: #c0c0c0;
     --comp-statebrowser-bg: #1e1e1e;
-    --comp-statebrowser-bg-networkname: #454545;
+    --comp-statebrowser-bg-networkname: #333;
     --comp-statebrowser-channel-active-bg: #ffffff0d;
-    --comp-statebrowser-channel-active-fg: #ababab;
+    --comp-statebrowser-channel-active-fg: #c0c0c0;
     --comp-usermenu-open-bg: #0e0e0e;
-    --comp-statebrowser-network-border: #656565;
+    --comp-statebrowser-network-border: #555;
     --comp-sidebar-bg: #1e1e1e;
-    --comp-sidebar-fg: #ababab;
+    --comp-sidebar-fg: #c0c0c0;
     --comp-aboutbuffer-bg: rgba(0, 0, 0, 0.03);
     --comp-aboutbuffer-header-bg: var(--brand-primary);
     --brand-link-normal: var(--brand-primary);
     --brand-link--hover: var(--brand-primary-hover);
     --brand-shadow: rgba(0, 0, 0, 0.1);
-    --comp-border: #484848;
+    --comp-border: transparent;
+}
+
+/* ---- Global Font ---- */
+.kiwi-wrap,
+.kiwi-welcome-simple,
+.kiwi-welcome-simple-form,
+.kiwi-controlinput,
+.kiwi-header,
+.kiwi-sidebar,
+.kiwi-statebrowser {
+    font-family: 'Nunito', sans-serif !important;
 }
 
 .kiwi-wrap {
     --kiwi-nick-brightness: 60;
 }
 
+/* ---- Remove all borders ---- */
 .kiwi-header {
-    border-bottom-color: #000;
+    border-bottom: none !important;
+}
+
+.kiwi-controlinput {
+    border-top: none !important;
+}
+
+.kiwi-container--sidebar-open .kiwi-sidebar {
+    border: none !important;
+}
+
+.kiwi-container-toggledraw-statebrowser {
+    border-right: none !important;
+}
+
+.kiwi-container-toggledraw-sidebar {
+    border-left: none !important;
 }
 
 .kiwi-statebrowser-channels .kiwi-statebrowser-channel {
+    border-bottom: none !important;
     color: #dedede;
 }
 
+.kiwi-messagelist-message--modern {
+    border-top-color: #2d2d2d !important;
+}
+
+/* ---- Hide StateBrowser (server/channel sidebar) ---- */
+.kiwi-statebrowser {
+    display: none !important;
+    box-shadow: none !important;
+}
+
+.kiwi-container-toggledraw-statebrowser {
+    display: none !important;
+}
+
+/* Adjust workspace to use full width when sidebar is hidden */
+.kiwi-workspace {
+    margin-left: 0 !important;
+}
+
+.kiwi-container {
+    margin-left: 0 !important;
+}
+
+.kiwi-wrap .kiwi-statebrowser {
+    width: 0 !important;
+}
+
+/* ---- Welcome Screen: Centered ---- */
+.kiwi-welcome-simple {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 1 !important;
+    min-height: 100% !important;
+    height: 100% !important;
+    background: var(--brand-default-bg) !important;
+}
+
+.kiwi-welcome-simple-form {
+    max-width: 400px !important;
+    width: 100% !important;
+    text-align: center !important;
+    padding: 40px 30px !important;
+    margin: 0 auto !important;
+}
+
+/* Logo centralizado acima do campo de nickname */
+.kiwi-welcome-simple-form::before {
+    content: '';
+    display: block;
+    width: 96px;
+    height: 96px;
+    background-image: url('../../favicon.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    margin: 0 auto 24px auto;
+}
+
+.kiwi-welcome-simple-form .u-submit {
+    background-color: var(--brand-primary) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 6px !important;
+    padding: 10px 24px !important;
+    font-family: 'Nunito', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.kiwi-welcome-simple-form .u-submit:hover {
+    background-color: var(--brand-primary-hover) !important;
+}
+
+/* ---- Clean input styling ---- */
+.kiwi-welcome-simple-form .u-input-text input,
+.kiwi-welcome-simple-form .u-form .u-input {
+    border: none !important;
+    border-bottom: 2px solid #333 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: var(--brand-default-fg) !important;
+    font-family: 'Nunito', sans-serif !important;
+    padding: 8px 4px !important;
+    transition: border-color 0.2s ease;
+}
+
+.kiwi-welcome-simple-form .u-input-text input:focus,
+.kiwi-welcome-simple-form .u-form .u-input:focus {
+    border-bottom-color: var(--brand-primary) !important;
+}
+
+/* Cleaner buttons globally */
+.u-button-primary {
+    border: none !important;
+    border-radius: 6px !important;
+    font-family: 'Nunito', sans-serif !important;
+    font-weight: 600 !important;
+}
+
+.u-button-secondary {
+    border: none !important;
+    border-radius: 6px !important;
+    font-family: 'Nunito', sans-serif !important;
+}
+
+/* ---- Dark overrides ---- */
 .u-tabbed-view-tabs {
     background: #2f2f2f;
-    border-bottom-color: #ffffff1a;
+    border-bottom-color: transparent;
 }
 .u-tabbed-view-tabs .u-tabbed-view-tab {
-    border-bottom-color: #ffffff1a;
+    border-bottom-color: transparent;
 }
 
 .u-form select {
@@ -59,7 +197,7 @@
 }
 
 button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start {
-    color: var(--brand-default-fg);
+    color: #fff;
 }
 
 .kiwi-welcome-znc h2 {
@@ -82,8 +220,7 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start {
 .kiwi-notconnected-button,
 .u-button-warning,
 .kiwi-settings-advanced-notice,
-.kiwi-networksettings .kiwi-title,
-.kiwi-welcome-simple-form .u-submit {
+.kiwi-networksettings .kiwi-title {
     color: var(--brand-default-fg);
 }
 
@@ -123,10 +260,6 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start {
     background: #3c3729;
 }
 
-.kiwi-statebrowser {
-    box-shadow: 0px 0 4px #ffffff2b;
-}
-
 .kiwi-statebrowser-channelfilter input,
 .kiwi-statebrowser-channels-info .kiwi-statebrowser-newchannel-inputwrap input {
     background-color: var(--brand-default-fg);
@@ -137,11 +270,7 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start {
     background: #2d2d2d;
 }
 
-.kiwi-messagelist-message--modern {
-    border-top-color: #2d2d2d;
-}
-
-.kiwi-container-toggledraw-statebrowser-messagecount  {
+.kiwi-container-toggledraw-statebrowser-messagecount {
     color: #f1f1f1;
 }
 

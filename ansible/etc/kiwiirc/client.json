@@ -13,6 +13,7 @@
     "startupOptions" : {
         "websocket": "wss://irc.somdomato.com/webirc",
         "channel": "#somdomato",
-        "nick": "{sdm_?}"
+        "nick": "{sdm_?}",
+        "showChannel": false
     }
 }
