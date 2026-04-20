@@ -680,17 +680,15 @@
         mode: '0755'
 
 
-    - name: Instalar npm-run-all globalmente
+    - name: Clonar e compilar The Lounge do fonte
       ansible.builtin.shell: |
-        npm install -g npm-run-all
-      when: >
-        refresh_apps and
-        nodejs_final_versions.results[0].rc == 0 and
-        nodejs_final_versions.results[1].rc == 0
-
-    - name: Instalar The Lounge via npm
-      ansible.builtin.shell: |
-        npm install -g thelounge
+        rm -rf /tmp/thelounge_build
+        git clone --depth 1 https://github.com/thelounge/thelounge.git /tmp/thelounge_build
+        cd /tmp/thelounge_build
+        NODE_ENV=production npm install
+        npm run build
+        npm install -g .
+        rm -rf /tmp/thelounge_build
       environment:
         THELOUNGE_HOME: /etc/thelounge
       when: >
@@ -790,9 +788,9 @@
         mode: '0644'
         force: true
       loop:
-        - "50-{{ domains.irc }}.conf"
-        - "51-{{ domains.gamja }}.conf"
-        - "52-{{ domains.chat }}.conf"
+        - "12-{{ domains.irc }}.conf"
+        - "13-{{ domains.gamja }}.conf"
+        - "14-{{ domains.chat }}.conf"
         - "53-{{ domains.lounge }}.conf"
       notify: Reiniciar Nginx  # Usando handler para reinício condicional
 
