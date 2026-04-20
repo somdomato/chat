@@ -4,25 +4,22 @@ After=network.target
 
 [Service]
 Type=simple
-DynamicUser=yes
+User=soju
+Group=soju
 StateDirectory=soju
 LogsDirectory=soju
 ConfigurationDirectory=soju
+RuntimeDirectory=soju
 Restart=always
-ExecStart=/usr/bin/soju --config /etc/soju/config
+ExecStart=/usr/local/bin/soju --config /etc/soju/config
 ExecReload=/bin/kill -HUP $MAINPID
 
-# TLS
-RuntimeDirectory=soju
-LoadCredential=key.pem:/etc/letsencrypt/live/irc.damjan.ie.mk/privkey.pem
-LoadCredential=cert.pem:/etc/letsencrypt/live/irc.damjan.ie.mk/fullchain.pem
-ExecStartPre=ln -s ${CREDENTIALS_DIRECTORY}/key.pem /run/soju/key.pem
-ExecStartPre=ln -s ${CREDENTIALS_DIRECTORY}/cert.pem /run/soju/cert.pem
-
-# in the soju config file, you can then have:
-#
-# tls /run/soju/cert.pem /run/soju/key.pem
-#
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/soju /var/log/soju /var/run/soju
 
 [Install]
 WantedBy=multi-user.target

@@ -76,9 +76,6 @@ server:
 
         ":8097":
             websocket: true
-            tls:
-                cert: fullchain.pem
-                key: privkey.pem
 
     # sets the permissions for Unix listen sockets. on a typical Linux system,
     # the default is 0775 or 0755, which prevents other users/groups from connecting

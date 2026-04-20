@@ -527,6 +527,34 @@
         state: absent
 
     # Configuração do WebIRC Gateway
+    - name: Instalar Go (Debian/Ubuntu)
+      ansible.builtin.package:
+        name: golang
+        state: present
+      when: is_debian_family
+
+    - name: Instalar Go (Oracle Linux/RHEL/Rocky)
+      ansible.builtin.package:
+        name: golang
+        state: present
+      when: is_rhel_family
+
+    - name: Clonar repositório do WebIRC Gateway
+      ansible.builtin.git:
+        repo: https://github.com/kiwiirc/webircgateway.git
+        dest: /tmp/webircgateway_build
+        depth: 1
+        force: true
+
+    - name: Compilar WebIRC Gateway
+      ansible.builtin.command:
+        cmd: go build -o webircgateway .
+        chdir: /tmp/webircgateway_build
+      environment:
+        GOPATH: /tmp/go
+        GOCACHE: /tmp/go-cache
+      changed_when: true
+
     - name: Criar diretório do WebIRC Gateway
       ansible.builtin.file:
         path: "{{ app_dirs.webircgateway }}"
@@ -535,13 +563,23 @@
         group: "{{ nginx_group }}"
         mode: '0755'
 
-    - name: Copiar binário do WebIRC Gateway do diretório working
+    - name: Instalar binário do WebIRC Gateway
       ansible.builtin.copy:
-        src: "../working/opt/webircgateway/webircgateway"
+        src: /tmp/webircgateway_build/webircgateway
         dest: "{{ app_dirs.webircgateway }}/webircgateway"
         owner: "{{ nginx_user }}"
         group: "{{ nginx_group }}"
         mode: '0755'
+        remote_src: true
+
+    - name: Limpar diretório de build do WebIRC Gateway
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/webircgateway_build
+        - /tmp/go
+        - /tmp/go-cache
 
     - name: Criar diretório de configuração do WebIRC Gateway
       ansible.builtin.file:
@@ -551,9 +589,9 @@
         group: root
         mode: '0755'
 
-    - name: Copiar configuração do WebIRC Gateway do diretório working
+    - name: Copiar configuração do WebIRC Gateway
       ansible.builtin.copy:
-        src: "../working/opt/webircgateway/config.conf"
+        src: "opt/webircgateway/config.conf"
         dest: "/etc/webircgateway/config.conf"
         owner: "{{ nginx_user }}"
         group: "{{ nginx_group }}"
