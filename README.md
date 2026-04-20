@@ -475,7 +475,7 @@ ansible/
 │   └── vault.yml                  # Credenciais criptografadas
 ├── etc/
 │   ├── nginx/sites.d/             # Configurações do Nginx
-│   │   ├── 50-irc.somdomato.com.conf
+│   │   ├── 12-irc.somdomato.com.conf
 │   │   └── 52-chat.somdomato.com.conf
 │   ├── systemd/system/            # Serviços systemd
 │   │   ├── somdomato-ergo.service
