@@ -27,6 +27,9 @@ ergo_group: "ergo"
 nginx_user: "nginx"
 nginx_group: "nginx"
 
+# Versões
+ergo_version: "2.16.0"
+
 # Configurações SSH
 ansible_port: 2200
 ansible_user: root

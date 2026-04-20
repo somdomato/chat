@@ -474,10 +474,47 @@
           - "--exclude=node_modules"
           - "-e 'ssh -p {{ ansible_port }}'"
       loop:
-        - ergo
         - gamja
         # - kiwiirc  # KiwiIRC é baixado do GitHub (veja tarefa abaixo)
       when: refresh_apps
+
+    - name: Determinar arquitetura para download do Ergo
+      ansible.builtin.set_fact:
+        ergo_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
+
+    - name: Baixar Ergo v{{ ergo_version }} para {{ ergo_arch }}
+      ansible.builtin.unarchive:
+        src: "https://github.com/ergochat/ergo/releases/download/v{{ ergo_version }}/ergo-{{ ergo_version }}-linux-{{ ergo_arch }}.tar.gz"
+        dest: /tmp
+        remote_src: true
+      when: refresh_apps
+
+    - name: Instalar binário do Ergo
+      ansible.builtin.copy:
+        src: "/tmp/ergo-{{ ergo_version }}-linux-{{ ergo_arch }}/ergo"
+        dest: "{{ app_dirs.ergo }}/ergo"
+        owner: "{{ ergo_user }}"
+        group: "{{ ergo_group }}"
+        mode: '0755'
+        remote_src: true
+      when: refresh_apps
+
+    - name: Copiar arquivos de configuração do Ergo
+      ansible.posix.synchronize:
+        src: "usr/share/ergo/"
+        dest: "{{ app_dirs.ergo }}/"
+        delete: false
+        recursive: true
+        rsync_opts:
+          - "--no-motd"
+          - "--exclude=ergo"
+          - "-e 'ssh -p {{ ansible_port }}'"
+      when: refresh_apps
+
+    - name: Limpar download temporário do Ergo
+      ansible.builtin.file:
+        path: "/tmp/ergo-{{ ergo_version }}-linux-{{ ergo_arch }}"
+        state: absent
 
     # Baixar e instalar KiwiIRC do GitHub
     - name: Criar diretório temporário para download do KiwiIRC
@@ -687,7 +724,8 @@
         cd /tmp/thelounge_build
         NODE_ENV=production npm install
         npm run build
-        npm install -g .
+        npm pack
+        npm install -g thelounge-*.tgz
         rm -rf /tmp/thelounge_build
       environment:
         THELOUNGE_HOME: /etc/thelounge
@@ -807,6 +845,18 @@
         - "somdomato-kiwiirc.service"
         - "somdomato-webircgateway.service"
         - "somdomato-thelounge.service"
+
+    - name: Habilitar e iniciar serviços
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+        daemon_reload: true
+      loop:
+        - "somdomato-ergo.service"
+        - "somdomato-webircgateway.service"
+        - "somdomato-thelounge.service"
+        - nginx
 
   handlers:
     - name: Mostrar resultado do certbot
