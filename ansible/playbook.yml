@@ -190,7 +190,7 @@
 
     - name: Adicionar repositório NodeSource para Node.js 24.x (Debian/Ubuntu)
       ansible.builtin.apt_repository:
-        repo: "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x {{ ansible_distribution_release }} main"
+        repo: "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x {{ ansible_facts['distribution_release'] }} main"
         state: present
       when: (nodejs_check.rc != 0 or npm_check.rc != 0) and is_debian_family
 
@@ -198,7 +198,7 @@
       ansible.builtin.yum_repository:
         name: nodesource
         description: Node.js Packages for Enterprise Linux
-        baseurl: "https://rpm.nodesource.com/pub_24.x/nodistro/repo/{{ ansible_architecture }}/"
+        baseurl: "https://rpm.nodesource.com/pub_24.x/nodistro/repo/{{ ansible_facts['architecture'] }}/"
         gpgcheck: yes
         gpgkey: https://rpm.nodesource.com/pub/el/NODESOURCE-GPG-SIGNING-KEY-EL
         enabled: yes
@@ -491,7 +491,7 @@
 
     - name: Determinar arquitetura para download do Ergo
       ansible.builtin.set_fact:
-        ergo_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
+        ergo_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'x86_64' }}"
 
     - name: Baixar Ergo v{{ ergo_version }} para {{ ergo_arch }}
       ansible.builtin.unarchive:
@@ -771,22 +771,35 @@
         mode: '0755'
 
 
-    - name: Clonar e compilar The Lounge do fonte
-      ansible.builtin.shell: |
-        rm -rf /tmp/thelounge_build
-        git clone --depth 1 https://github.com/thelounge/thelounge.git /tmp/thelounge_build
-        cd /tmp/thelounge_build
-        NODE_ENV=production npm install
-        npm run build
-        npm pack
-        npm install -g thelounge-*.tgz
-        rm -rf /tmp/thelounge_build
-      environment:
-        THELOUNGE_HOME: /etc/thelounge
+    - name: Instalar yarn globalmente via npm
+      ansible.builtin.shell: npm install -g yarn
+      when: >
+        nodejs_final_versions.results[0].rc == 0 and
+        nodejs_final_versions.results[1].rc == 0
+
+    - name: Instalar The Lounge via yarn
+      ansible.builtin.shell: yarn global add thelounge
       when: >
         refresh_apps and
         nodejs_final_versions.results[0].rc == 0 and
         nodejs_final_versions.results[1].rc == 0
+
+    - name: Encontrar binário do thelounge após instalação
+      ansible.builtin.shell: which thelounge || npm bin -g | xargs -I{} ls {}/thelounge 2>/dev/null
+      register: thelounge_bin_path
+      changed_when: false
+      failed_when: false
+
+    - name: Criar link simbólico para thelounge em /usr/local/bin
+      ansible.builtin.file:
+        src: "{{ thelounge_bin_path.stdout | trim }}"
+        dest: /usr/local/bin/thelounge
+        state: link
+        force: yes
+      when:
+        - thelounge_bin_path.rc == 0
+        - thelounge_bin_path.stdout | trim != ''
+        - thelounge_bin_path.stdout | trim != '/usr/local/bin/thelounge'
 
     - name: Criar diretório de configuração do The Lounge
       ansible.builtin.file:
