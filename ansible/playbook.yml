@@ -166,6 +166,11 @@
         name: nginx
         state: present
 
+    # - name: Instalar soju
+    #   ansible.builtin.package:
+    #     name: soju
+    #     state: present
+
     # Node.js installation - compatível com múltiplas distros
 
     - name: Baixar e adicionar chave GPG do NodeSource (Debian/Ubuntu)
@@ -369,7 +374,6 @@
           --email {{ letsencrypt_email }} \
           --agree-tos \
           --non-interactive \
-          --expand \
           --verbose \
           -d {{ domains.irc }} \
           -d {{ domains.chat }} \
@@ -385,7 +389,7 @@
           - "Return code: {{ certbot_result.rc }}"
           - "STDOUT: {{ certbot_result.stdout }}"
           - "STDERR: {{ certbot_result.stderr }}"
-      when: not cert_check.stat.exists and certbot_result.rc != 0
+      when: certbot_result is defined and certbot_result.rc is defined and certbot_result.rc != 0
 
     - name: Falhar se certificados não foram obtidos
       ansible.builtin.fail:
@@ -394,7 +398,7 @@
           certbot rc={{ certbot_result.rc }}
           stderr={{ certbot_result.stderr | default('') }}
           Para debug: ssh root@ananke -p 2200 && certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini -d {{ domains.irc }} --dry-run -v
-      when: not cert_check.stat.exists and not (cert_check.stat.exists | default(false))
+      when: certbot_result is defined and certbot_result.rc is defined and certbot_result.rc != 0
 
     - name: Verificar se destinos dos links simbólicos são diretórios
       ansible.builtin.stat:
@@ -404,7 +408,6 @@
         - "{{ domains.gamja }}"
         - "{{ domains.lounge }}"
       register: symlink_dest_check
-      when: cert_check.stat.exists
 
     - name: Remover diretórios existentes que impedem criação dos links simbólicos
       ansible.builtin.file:
@@ -412,7 +415,6 @@
         state: absent
       loop: "{{ symlink_dest_check.results }}"
       when:
-        - cert_check.stat.exists
         - item.stat is defined
         - item.stat.exists
         - item.stat.isdir
@@ -424,7 +426,6 @@
         dest: "{{ ssl_cert_dir }}/{{ domains.chat }}"
         state: link
         force: yes
-      when: cert_check.stat.exists
 
     - name: Criar links simbólicos dos certificados para gamja.somdomato.com
       ansible.builtin.file:
@@ -432,7 +433,6 @@
         dest: "{{ ssl_cert_dir }}/{{ domains.gamja }}"
         state: link
         force: yes
-      when: cert_check.stat.exists
 
     - name: Criar links simbólicos dos certificados para lounge.somdomato.com
       ansible.builtin.file:
@@ -440,7 +440,6 @@
         dest: "{{ ssl_cert_dir }}/{{ domains.lounge }}"
         state: link
         force: yes
-      when: cert_check.stat.exists
 
     - name: "Garante que o grupo exista: {{ ergo_group }}"
       ansible.builtin.group:
@@ -453,6 +452,18 @@
         group: "{{ ergo_group }}"
         create_home: false  # Adicionado para evitar criação de home desnecessária
         system: true        # Define como usuário de sistema
+
+    - name: "Garante que o grupo exista: {{ soju_group }}"
+      ansible.builtin.group:
+        name: "{{ soju_group }}"
+        state: present
+
+    - name: "Criar usuário de sistema: {{ soju_user }}"
+      ansible.builtin.user:
+        name: "{{ soju_user }}"
+        group: "{{ soju_group }}"
+        create_home: false
+        system: true
 
     - name: Copiar script de instalação de certificados do Let's Encrypt
       ansible.builtin.copy:
@@ -652,6 +663,49 @@
         mode: '0640'
         remote_src: true
 
+    # ===== SOJU =====
+    - name: Criar diretório de configuração do soju
+      ansible.builtin.file:
+        path: /etc/soju
+        state: directory
+        owner: "{{ soju_user }}"
+        group: "{{ soju_group }}"
+        mode: '0750'
+
+    - name: Criar diretório de estado do soju
+      ansible.builtin.file:
+        path: /var/lib/soju
+        state: directory
+        owner: "{{ soju_user }}"
+        group: "{{ soju_group }}"
+        mode: '0750'
+
+    - name: Copiar configuração do soju
+      ansible.builtin.copy:
+        src: "etc/soju/config"
+        dest: "/etc/soju/config"
+        owner: "{{ soju_user }}"
+        group: "{{ soju_group }}"
+        mode: '0640'
+
+    - name: Copiar certificado fullchain do soju
+      ansible.builtin.copy:
+        src: "{{ ssl_cert_dir }}/{{ domains.irc }}/fullchain.pem"
+        dest: "/etc/soju/fullchain.pem"
+        owner: "{{ soju_user }}"
+        group: "{{ soju_group }}"
+        mode: '0640'
+        remote_src: true
+
+    - name: Copiar chave privada do soju
+      ansible.builtin.copy:
+        src: "{{ ssl_cert_dir }}/{{ domains.irc }}/privkey.pem"
+        dest: "/etc/soju/privkey.pem"
+        owner: "{{ soju_user }}"
+        group: "{{ soju_group }}"
+        mode: '0600'
+        remote_src: true
+
     - name: Verificar instalação final do Node.js e npm
       ansible.builtin.command: "{{ item }}"
       loop:
@@ -829,7 +883,7 @@
         - "12-{{ domains.irc }}.conf"
         - "13-{{ domains.gamja }}.conf"
         - "14-{{ domains.chat }}.conf"
-        - "53-{{ domains.lounge }}.conf"
+        - "15-{{ domains.lounge }}.conf"
       notify: Reiniciar Nginx  # Usando handler para reinício condicional
 
     - name: Copiar serviços systemd
@@ -845,6 +899,7 @@
         - "somdomato-kiwiirc.service"
         - "somdomato-webircgateway.service"
         - "somdomato-thelounge.service"
+        - "somdomato-soju.service"
 
     - name: Habilitar e iniciar serviços
       ansible.builtin.systemd:
@@ -856,6 +911,7 @@
         - "somdomato-ergo.service"
         - "somdomato-webircgateway.service"
         - "somdomato-thelounge.service"
+        - "somdomato-soju.service"
         - nginx
 
   handlers:
@@ -872,6 +928,7 @@
         - "somdomato-ergo.service"
         - "somdomato-webircgateway.service"
         - "somdomato-thelounge.service"
+        - "somdomato-soju.service"
         # - "somdomato-kiwiirc.service"  # Apenas se necessário
 
     - name: Testar configuração do Nginx

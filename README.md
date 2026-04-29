@@ -679,6 +679,275 @@ Faça backup regular de:
 - Dados do IRC: `/usr/share/ergo/ircd.db` (se usando SQLite)
 - Certificados: `/etc/letsencrypt/`
 
+---
+
+## 🔌 Soju IRC Bouncer + Senpai
+
+O [soju](https://soju.im/) é um bouncer IRC moderno que mantém suas conexões com redes IRC ativas mesmo quando você está offline, permitindo que você veja o histórico de mensagens ao reconectar. O [senpai](https://git.sr.ht/~taiite/senpai) é um cliente IRC de terminal que integra perfeitamente com o soju.
+
+### Arquitetura
+
+```
+senpai (terminal) → soju (bouncer :6698) → irc.libera.chat  (nick: sistematico)
+                                          → irc.somdomato.com (nick: lucas)
+```
+
+### Instalação do soju
+
+O soju já está configurado pelo Ansible neste projeto. Para instalar manualmente:
+
+```bash
+# Fedora / RHEL / Oracle Linux
+sudo dnf install soju
+
+# Debian / Ubuntu
+sudo apt install soju
+
+# Ou compilar da fonte
+go install codeberg.org/emersion/soju@latest
+```
+
+### Configuração do soju
+
+**Localização:** `/etc/soju/config`
+
+```
+listen unix+admin:///var/run/soju/admin
+listen ircs://:6698
+tls /etc/soju/fullchain.pem /etc/soju/privkey.pem
+hostname irc.somdomato.com
+db sqlite3 /var/lib/soju/main.db
+```
+
+**Detalhes:**
+- `listen ircs://:6698` — porta TLS do bouncer (clientes se conectam aqui)
+- `unix+admin` — socket de administração local para `sojuctl`
+- `hostname` — identifica o soju para os clientes
+- Certificados TLS copiados automaticamente pelo hook do Let's Encrypt
+
+### Gerenciar o serviço
+
+```bash
+# Iniciar / parar / reiniciar
+sudo systemctl enable --now soju
+sudo systemctl restart soju
+
+# Ver logs
+sudo journalctl -u soju -f
+```
+
+### Criar usuário no soju
+
+```bash
+# Criar usuário (rode no servidor com o socket admin disponível)
+sudo sojuctl -config /etc/soju/config user create -username lucas -password 'senha-segura' -admin
+```
+
+> **Nota:** Substitua `senha-segura` por uma senha forte. Esse é o usuário que o senpai vai usar para autenticar no bouncer.
+
+### Adicionar redes IRC
+
+Após criar o usuário, adicione as redes que o soju deve manter conectadas:
+
+```bash
+# Libera.chat com nick "sistematico"
+sudo sojuctl -config /etc/soju/config network create \
+  -addr irc.libera.chat:6697 \
+  -name libera \
+  -nick sistematico \
+  -realname "Sistematico" \
+  -username lucas
+
+# Som do Mato com nick "lucas"
+sudo sojuctl -config /etc/soju/config network create \
+  -addr irc.somdomato.com:6697 \
+  -name somdomato \
+  -nick lucas \
+  -realname "Lucas" \
+  -username lucas
+```
+
+**Ou via IRC diretamente** (conectado ao soju pelo senpai):
+
+```irc
+/msg BouncerServ network create -addr irc.libera.chat:6697 -name libera -nick sistematico
+/msg BouncerServ network create -addr irc.somdomato.com:6697 -name somdomato -nick lucas
+```
+
+### Listar e gerenciar redes
+
+```bash
+# Listar redes cadastradas
+sudo sojuctl -config /etc/soju/config network list -username lucas
+
+# Remover uma rede
+sudo sojuctl -config /etc/soju/config network delete -username lucas -name libera
+```
+
+### Instalação do senpai
+
+```bash
+# Fedora / RHEL
+sudo dnf install senpai
+
+# Debian / Ubuntu
+sudo apt install senpai
+
+# Compilar da fonte
+go install git.sr.ht/~taiite/senpai@latest
+```
+
+### Configuração do senpai
+
+**Localização:** `~/.config/senpai/senpai.scfg`
+
+```
+# Conectar ao soju (bouncer)
+address ircs://irc.somdomato.com:6698
+
+# Usuário criado no soju
+nickname lucas
+password "lucas:senha-segura"
+```
+
+> O formato da senha é `usuario:senha` — o soju usa isso para autenticar e identificar a sessão.
+
+**Exemplo com opções adicionais:**
+
+```
+address   ircs://irc.somdomato.com:6698
+nickname  lucas
+password  "lucas:senha-segura"
+
+# Prefixo para comandos (padrão: :)
+# cmd-prefix :
+
+# Não verificar certificado autoassinado (apenas dev local)
+# tls-skip-verify true
+```
+
+### Iniciando o senpai
+
+```bash
+senpai
+```
+
+O senpai conecta ao soju e carrega automaticamente todas as redes cadastradas. Use as seguintes teclas para navegar:
+
+| Tecla | Ação |
+|-------|------|
+| `Alt+↑` / `Alt+↓` | Navegar entre buffers (canais/redes) |
+| `Alt+←` / `Alt+→` | Alternar entre redes |
+| `Ctrl+L` | Limpar tela |
+| `Ctrl+C` | Fechar senpai (soju continua conectado) |
+
+### Navegar entre redes no senpai
+
+O soju apresenta cada rede como um servidor separado. Para alternar entre elas:
+
+```
+# Ver lista de buffers abertos
+Alt+seta para cima/baixo
+
+# Ou entrar num canal numa rede específica (via BouncerServ)
+/msg BouncerServ list
+```
+
+### Comandos úteis no senpai
+
+```irc
+# Entrar em canal
+/join #somdomato
+
+# Mudar de rede para enviar mensagens (prefixo com nome da rede)
+# O senpai mostra a rede atual na barra de status
+
+# Ver redes no bouncer
+/msg BouncerServ network list
+
+# Verificar status do nick no Libera
+/msg NickServ info sistematico
+
+# Identificar nick (se registrado)
+/msg NickServ identify sistematico senha-do-nickserv
+```
+
+### Autenticação SASL nos nicks registrados
+
+Para autenticar automaticamente nos servidores ao conectar, edite as redes no soju:
+
+```bash
+# Libera.chat com SASL PLAIN
+sudo sojuctl -config /etc/soju/config network update \
+  -name libera \
+  -username lucas \
+  -sasl-mechanism PLAIN \
+  -sasl-plain-username sistematico \
+  -sasl-plain-password 'senha-do-nickserv-libera'
+
+# Som do Mato (se tiver NickServ)
+sudo sojuctl -config /etc/soju/config network update \
+  -name somdomato \
+  -username lucas \
+  -sasl-mechanism PLAIN \
+  -sasl-plain-username lucas \
+  -sasl-plain-password 'senha-do-nickserv-somdomato'
+```
+
+**Ou via IRC no senpai:**
+
+```irc
+/msg BouncerServ network update libera -sasl-mechanism PLAIN -sasl-plain-username sistematico -sasl-plain-password senha
+```
+
+### Porta do soju no firewall
+
+A porta 6698 **não precisa** ser aberta publicamente se o senpai for usado na mesma máquina ou via SSH tunnel. Se precisar acesso remoto:
+
+```bash
+# Oracle Linux / RHEL
+sudo firewall-cmd --permanent --add-port=6698/tcp
+sudo firewall-cmd --reload
+
+# Debian / Ubuntu
+sudo ufw allow 6698/tcp
+```
+
+**Recomendado para uso pessoal:** acesso via SSH tunnel:
+
+```bash
+# Na máquina local, criar túnel
+ssh -L 6698:localhost:6698 usuario@irc.somdomato.com -N
+
+# Então no senpai, conectar em localhost
+# address ircs://localhost:6698
+# tls-skip-verify true   # (certificado é do servidor remoto)
+```
+
+### Checklist soju + senpai
+
+```bash
+# 1. Serviço rodando
+sudo systemctl status soju
+
+# 2. Porta escutando
+sudo ss -tlnp | grep 6698
+
+# 3. Usuário existe
+sudo sojuctl -config /etc/soju/config user list
+
+# 4. Redes cadastradas
+sudo sojuctl -config /etc/soju/config network list -username lucas
+
+# 5. Testar conexão local
+openssl s_client -connect localhost:6698
+
+# 6. Logs de erro
+sudo journalctl -u soju -n 50
+```
+
+---
+
 ## 🤝 Contribuindo
 
 1. Fork o projeto

@@ -1,0 +1,5 @@
+listen unix+admin:///var/run/soju/admin
+listen ircs://:6698
+tls /etc/soju/fullchain.pem /etc/soju/privkey.pem
+hostname irc.somdomato.com
+db sqlite3 /var/lib/soju/main.db

@@ -2,25 +2,15 @@
 
 set -eu
 
-# ERGO_PATH="/usr/share/ergo"
-
-# umask 077
-# cp /etc/letsencrypt/live/irc.somdomato.com/fullchain.pem $ERGO_PATH
-# cp /etc/letsencrypt/live/irc.somdomato.com/privkey.pem $ERGO_PATH
-
-# chown ergo:ergo $ERGO_PATH/*.pem
-
-# systemctl reload ergo.service
-
-
 umask 077
 cp /etc/letsencrypt/live/irc.somdomato.com/fullchain.pem /etc/ergo/
 cp /etc/letsencrypt/live/irc.somdomato.com/privkey.pem /etc/ergo/
-
 
 cp /etc/letsencrypt/live/irc.somdomato.com/fullchain.pem /etc/soju/
 cp /etc/letsencrypt/live/irc.somdomato.com/privkey.pem /etc/soju/
 
 chown ergo:ergo /etc/ergo/*.pem
+chown soju:soju /etc/soju/*.pem
 
-systemctl reload ergo.service
+systemctl reload somdomato-ergo.service
+systemctl reload somdomato-soju.service

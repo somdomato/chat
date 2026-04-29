@@ -24,6 +24,8 @@ backup_dir: "/var/backups/sdm-chat"
 # Usuários e grupos
 ergo_user: "ergo"
 ergo_group: "ergo"
+soju_user: "soju"
+soju_group: "soju"
 nginx_user: "nginx"
 nginx_group: "nginx"
 

@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 User=soju
 Group=soju
+WorkingDirectory=/var/lib/soju
 StateDirectory=soju
 LogsDirectory=soju
 ConfigurationDirectory=soju
