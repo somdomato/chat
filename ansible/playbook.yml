@@ -914,6 +914,19 @@
         - "somdomato-thelounge.service"
         - "somdomato-soju.service"
 
+    - name: Abrir portas no firewall (Oracle Linux / RHEL)
+      ansible.posix.firewalld:
+        port: "{{ item }}"
+        permanent: true
+        state: enabled
+        immediate: true
+      loop:
+        - "80/tcp"
+        - "443/tcp"
+        - "6697/tcp"
+        - "8097/tcp"
+      when: is_rhel_family
+
     - name: Habilitar e iniciar serviços
       ansible.builtin.systemd:
         name: "{{ item }}"
