@@ -75,6 +75,9 @@ server:
             websocket: true
 
         ":8097":
+          tls:
+            cert: fullchain.pem
+            key: privkey.pem
             websocket: true
 
     # sets the permissions for Unix listen sockets. on a typical Linux system,

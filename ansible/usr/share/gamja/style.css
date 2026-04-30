@@ -108,11 +108,6 @@ button.danger:hover {
 	overflow-y: auto;
 }
 
-/* ---- Hide server/channel sidebar ---- */
-#buffer-list {
-	display: none;
-}
-
 /* ---- Member list (right sidebar) ---- */
 #member-list {
 	color: var(--main-color);
