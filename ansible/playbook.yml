@@ -166,10 +166,26 @@
         name: nginx
         state: present
 
-    # - name: Instalar soju
-    #   ansible.builtin.package:
-    #     name: soju
-    #     state: present
+    - name: Instalar Go (necessário para compilar soju)
+      ansible.builtin.package:
+        name: golang
+        state: present
+
+    - name: Verificar se soju já está instalado
+      ansible.builtin.stat:
+        path: /usr/local/bin/soju
+      register: soju_binary
+
+    - name: Compilar e instalar soju do fonte
+      ansible.builtin.shell: |
+        export HOME=/root
+        export GOPATH=/root/go
+        go install git.sr.ht/~emersion/soju/cmd/soju@latest
+        cp /root/go/bin/soju /usr/local/bin/soju
+        chmod 755 /usr/local/bin/soju
+      when: not soju_binary.stat.exists
+      changed_when: true
+      ignore_errors: true
 
     # Node.js installation - compatível com múltiplas distros
 
@@ -189,8 +205,13 @@
       when: (nodejs_check.rc != 0 or npm_check.rc != 0) and is_debian_family
 
     - name: Adicionar repositório NodeSource para Node.js 24.x (Debian/Ubuntu)
-      ansible.builtin.apt_repository:
-        repo: "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x {{ ansible_facts['distribution_release'] }} main"
+      ansible.builtin.deb822_repository:
+        name: nodesource
+        types: deb
+        uris: https://deb.nodesource.com/node_24.x
+        suites: "{{ ansible_facts['distribution_release'] }}"
+        components: main
+        signed_by: /usr/share/keyrings/nodesource.gpg
         state: present
       when: (nodejs_check.rc != 0 or npm_check.rc != 0) and is_debian_family
 
@@ -364,16 +385,18 @@
     - name: Verificar se certificado SSL já existe
       ansible.builtin.stat:
         path: "{{ ssl_cert_dir }}/{{ domains.irc }}/fullchain.pem"
-      register: cert_check
+      register: ssl_cert_exists
 
     - name: Obter certificados SSL para todos os domínios
       ansible.builtin.shell: |
         certbot certonly \
           --dns-cloudflare \
           --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+          --dns-cloudflare-propagation-seconds 60 \
           --email {{ letsencrypt_email }} \
           --agree-tos \
           --non-interactive \
+          --keep-until-expiring \
           --verbose \
           -d {{ domains.irc }} \
           -d {{ domains.chat }} \
@@ -381,7 +404,7 @@
           -d {{ domains.lounge }}
       register: certbot_result
       failed_when: false  # Não falhar automaticamente para poder mostrar o erro
-      when: not cert_check.stat.exists
+      when: not ssl_cert_exists.stat.exists
 
     - name: Mostrar resultado detalhado do certbot
       ansible.builtin.debug:
@@ -486,7 +509,7 @@
           - "-e 'ssh -p {{ ansible_port }}'"
       loop:
         - gamja
-        # - kiwiirc  # KiwiIRC é baixado do GitHub (veja tarefa abaixo)
+        - kiwiirc
       when: refresh_apps
 
     - name: Determinar arquitetura para download do Ergo
@@ -499,6 +522,14 @@
         dest: /tmp
         remote_src: true
       when: refresh_apps
+
+    - name: Criar diretório do Ergo
+      ansible.builtin.file:
+        path: "{{ app_dirs.ergo }}"
+        state: directory
+        owner: "{{ ergo_user }}"
+        group: "{{ ergo_group }}"
+        mode: '0755'
 
     - name: Instalar binário do Ergo
       ansible.builtin.copy:
@@ -575,6 +606,11 @@
         state: absent
 
     # Configuração do WebIRC Gateway
+    - name: Verificar se WebIRC Gateway já está instalado
+      ansible.builtin.stat:
+        path: "{{ app_dirs.webircgateway }}/webircgateway"
+      register: webircgateway_binary
+
     - name: Instalar Go (Debian/Ubuntu)
       ansible.builtin.package:
         name: golang
@@ -593,6 +629,7 @@
         dest: /tmp/webircgateway_build
         depth: 1
         force: true
+      when: not webircgateway_binary.stat.exists
 
     - name: Compilar WebIRC Gateway
       ansible.builtin.command:
@@ -602,6 +639,7 @@
         GOPATH: /tmp/go
         GOCACHE: /tmp/go-cache
       changed_when: true
+      when: not webircgateway_binary.stat.exists
 
     - name: Criar diretório do WebIRC Gateway
       ansible.builtin.file:
@@ -619,6 +657,7 @@
         group: "{{ nginx_group }}"
         mode: '0755'
         remote_src: true
+      when: not webircgateway_binary.stat.exists
 
     - name: Limpar diretório de build do WebIRC Gateway
       ansible.builtin.file:
@@ -773,6 +812,8 @@
 
     - name: Instalar yarn globalmente via npm
       ansible.builtin.shell: npm install -g yarn
+      args:
+        creates: /usr/local/bin/yarn
       when: >
         nodejs_final_versions.results[0].rc == 0 and
         nodejs_final_versions.results[1].rc == 0
@@ -897,7 +938,10 @@
         - "13-{{ domains.gamja }}.conf"
         - "14-{{ domains.chat }}.conf"
         - "15-{{ domains.lounge }}.conf"
-      notify: Reiniciar Nginx  # Usando handler para reinício condicional
+      notify: Reiniciar Nginx
+
+    - name: Aplicar reinício do Nginx imediatamente se config mudou
+      ansible.builtin.meta: flush_handlers
 
     - name: Copiar serviços systemd
       ansible.builtin.copy:
