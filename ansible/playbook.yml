@@ -171,10 +171,13 @@
         name: golang
         state: present
 
-    - name: Verificar se soju já está instalado
+    - name: Verificar se soju e sojuctl já estão instalados
       ansible.builtin.stat:
-        path: /usr/local/bin/soju
-      register: soju_binary
+        path: "{{ item }}"
+      loop:
+        - /usr/local/bin/soju
+        - /usr/local/bin/sojuctl
+      register: soju_binaries
 
     - name: Compilar e instalar soju do fonte
       ansible.builtin.shell: |
@@ -183,14 +186,30 @@
         go install git.sr.ht/~emersion/soju/cmd/soju@latest
         cp /root/go/bin/soju /usr/local/bin/soju
         chmod 755 /usr/local/bin/soju
-      when: not soju_binary.stat.exists
+      when: not soju_binaries.results[0].stat.exists
       changed_when: true
 
-    - name: Verificar se binário do soju foi compilado com sucesso
+    - name: Compilar e instalar sojuctl do fonte
+      ansible.builtin.shell: |
+        export HOME=/root
+        export GOPATH=/root/go
+        go install git.sr.ht/~emersion/soju/cmd/sojuctl@latest
+        cp /root/go/bin/sojuctl /usr/local/bin/sojuctl
+        chmod 755 /usr/local/bin/sojuctl
+      when: not soju_binaries.results[1].stat.exists
+      changed_when: true
+
+    - name: Verificar se soju foi instalado com sucesso
       ansible.builtin.stat:
         path: /usr/local/bin/soju
-      register: soju_binary_check
-      failed_when: not soju_binary_check.stat.exists
+      register: soju_check
+      failed_when: not soju_check.stat.exists
+
+    - name: Verificar se sojuctl foi instalado com sucesso
+      ansible.builtin.stat:
+        path: /usr/local/bin/sojuctl
+      register: sojuctl_check
+      failed_when: not sojuctl_check.stat.exists
 
     # Node.js installation - compatível com múltiplas distros
 
@@ -998,7 +1017,7 @@
 
     - name: Criar usuário admin do soju (se ainda não existir)
       ansible.builtin.shell: >
-        sojuctl -config /etc/soju/config user create
+        /usr/local/bin/sojuctl -config /etc/soju/config user create
         -username {{ soju_admin_user | default('admin') }}
         -password {{ soju_admin_password }}
         -admin
@@ -1006,9 +1025,9 @@
       failed_when:
         - soju_user_create.rc != 0
         - "'already exists' not in soju_user_create.stderr"
+        - "'already exists' not in soju_user_create.stdout"
       changed_when: soju_user_create.rc == 0
       when: soju_admin_password is defined
-      no_log: true
 
   handlers:
     - name: Mostrar resultado do certbot
