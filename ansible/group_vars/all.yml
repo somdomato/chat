@@ -26,6 +26,8 @@ ergo_user: "ergo"
 ergo_group: "ergo"
 soju_user: "soju"
 soju_group: "soju"
+soju_admin_user: "admin"
+# soju_admin_password: definir no vault.yml
 nginx_user: "nginx"
 nginx_group: "nginx"
 

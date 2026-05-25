@@ -185,7 +185,12 @@
         chmod 755 /usr/local/bin/soju
       when: not soju_binary.stat.exists
       changed_when: true
-      ignore_errors: true
+
+    - name: Verificar se binário do soju foi compilado com sucesso
+      ansible.builtin.stat:
+        path: /usr/local/bin/soju
+      register: soju_binary_check
+      failed_when: not soju_binary_check.stat.exists
 
     # Node.js installation - compatível com múltiplas distros
 
@@ -968,7 +973,8 @@
         - "80/tcp"
         - "443/tcp"
         - "6697/tcp"
-        - "8097/tcp"
+        - "6698/tcp"
+        - "8067/tcp"
       when: is_rhel_family
 
     - name: Habilitar e iniciar serviços
@@ -983,6 +989,26 @@
         - "somdomato-thelounge.service"
         - "somdomato-soju.service"
         - nginx
+
+    - name: Aguardar socket admin do soju estar disponível
+      ansible.builtin.wait_for:
+        path: /var/run/soju/admin
+        timeout: 15
+      when: soju_admin_password is defined
+
+    - name: Criar usuário admin do soju (se ainda não existir)
+      ansible.builtin.shell: >
+        sojuctl -config /etc/soju/config user create
+        -username {{ soju_admin_user | default('admin') }}
+        -password {{ soju_admin_password }}
+        -admin
+      register: soju_user_create
+      failed_when:
+        - soju_user_create.rc != 0
+        - "'already exists' not in soju_user_create.stderr"
+      changed_when: soju_user_create.rc == 0
+      when: soju_admin_password is defined
+      no_log: true
 
   handlers:
     - name: Mostrar resultado do certbot
