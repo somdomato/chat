@@ -47,10 +47,6 @@
     font-family: 'Nunito', sans-serif !important;
 }
 
-/* Esconde a lateral direita */
-.kiwi-startup-common-section {
-    display: none !important;
-}
 
 /* ---- Remove borders ---- */
 .kiwi-header { border-bottom: none !important; }
@@ -78,6 +74,14 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
 /* ================================================================
    WELCOME SCREEN — Wood Background + Glass Card (Light)
    ================================================================ */
+
+.kiwi-startup-common-section-info {
+    display: none !important;
+}
+.kiwi-startup-common-section-connection {
+    width: 100% !important;
+    max-width: 100% !important;
+}
 
 .kiwi-welcome-simple {
     display: flex !important;
@@ -118,7 +122,7 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     max-width: 420px !important;
     margin: 0 auto !important;
     text-align: center !important;
-    padding: 52px 44px !important;
+    padding: 20px 44px !important;
     box-sizing: border-box !important;
     background: rgba(255, 253, 250, 0.14) !important;
     backdrop-filter: blur(20px) saturate(1.6) !important;
