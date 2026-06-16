@@ -177,36 +177,55 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
 /* Labels */
 .kiwi-welcome-simple-form label,
 .kiwi-welcome-simple-form .u-form label {
-    color: rgba(255, 255, 255, 0.55) !important;
-    font-size: 0.78rem !important;
+    display: block !important;
+    text-align: left !important;
+    color: rgba(255, 255, 255, 0.45) !important;
+    font-size: 0.72rem !important;
     font-weight: 600 !important;
-    letter-spacing: 0.08em !important;
+    letter-spacing: 0.1em !important;
     text-transform: uppercase !important;
+    margin-bottom: 6px !important;
 }
 
-/* Nick input */
+/* Input wrapper */
+.kiwi-welcome-simple-form .u-input-text {
+    background: rgba(255, 255, 255, 0.07) !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
+    border-radius: 10px !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+    overflow: hidden !important;
+}
+.kiwi-welcome-simple-form .u-input-text:focus-within {
+    border-color: rgba(66, 185, 146, 0.55) !important;
+    box-shadow: 0 0 0 3px rgba(66, 185, 146, 0.12) !important;
+}
+
+/* Nick / password input */
 .kiwi-welcome-simple-form .u-input-text input,
 .kiwi-welcome-simple-form .u-form .u-input {
     border: none !important;
-    border-bottom: 2px solid rgba(255, 255, 255, 0.18) !important;
-    border-radius: 0 !important;
+    border-radius: 10px !important;
     background: transparent !important;
-    color: rgba(255, 255, 255, 0.9) !important;
+    color: rgba(255, 255, 255, 0.92) !important;
     font-family: 'Nunito', sans-serif !important;
-    font-size: 1.05rem !important;
-    padding: 10px 4px !important;
+    font-size: 1rem !important;
+    padding: 11px 16px !important;
     text-align: center !important;
-    transition: border-color 0.25s ease !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    transition: none !important;
     caret-color: var(--brand-primary) !important;
+    outline: none !important;
+    box-shadow: none !important;
 }
 .kiwi-welcome-simple-form .u-input-text input::placeholder,
 .kiwi-welcome-simple-form .u-form .u-input::placeholder {
-    color: rgba(255, 255, 255, 0.28) !important;
+    color: rgba(255, 255, 255, 0.22) !important;
 }
 .kiwi-welcome-simple-form .u-input-text input:focus,
 .kiwi-welcome-simple-form .u-form .u-input:focus {
-    border-bottom-color: var(--brand-primary) !important;
-    box-shadow: 0 2px 0 rgba(66, 185, 146, 0.2) !important;
+    outline: none !important;
+    box-shadow: none !important;
 }
 
 /* Submit button */
