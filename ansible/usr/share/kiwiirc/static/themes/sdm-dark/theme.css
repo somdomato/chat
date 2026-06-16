@@ -5,32 +5,35 @@
     --brand-primary-hover: #5ec9a6;
     --brand-midtone: #2b2b2b;
     --brand-darktone: #969696;
-    --brand-default-bg: #1e1e1e;
-    --brand-default-fg: #c0c0c0;
+    --brand-default-bg: #1a1a1a;
+    --brand-default-fg: #d4d4d4;
     --brand-notice: #f6c358;
     --brand-warning: #fcb46e;
     --brand-error: #c44040;
     --comp-workspace-before-bg: var(--brand-primary);
     --comp-bg-kiwi-workspace--disconnected-after-bg: var(--brand-error);
-    --comp-header-bg: var(--brand-default-bg);
+    --comp-header-bg: #1a1a1a;
     --comp-header-name-fg: var(--brand-default-fg);
     --comp-header-option-active-fg: #f1f1f1;
     --comp-header-option-active-bg: var(--brand-primary);
     --comp-statebrowser-fg: #c0c0c0;
-    --comp-statebrowser-bg: #1e1e1e;
-    --comp-statebrowser-bg-networkname: #333;
-    --comp-statebrowser-channel-active-bg: #ffffff0d;
-    --comp-statebrowser-channel-active-fg: #c0c0c0;
-    --comp-usermenu-open-bg: #0e0e0e;
-    --comp-statebrowser-network-border: #555;
-    --comp-sidebar-bg: #1e1e1e;
+    --comp-statebrowser-bg: #141414;
+    --comp-statebrowser-bg-networkname: #222;
+    --comp-statebrowser-channel-active-bg: rgba(66, 185, 146, 0.12);
+    --comp-statebrowser-channel-active-fg: #fff;
+    --comp-usermenu-open-bg: #0a0a0a;
+    --comp-statebrowser-network-border: #333;
+    --comp-sidebar-bg: #1a1a1a;
     --comp-sidebar-fg: #c0c0c0;
     --comp-aboutbuffer-bg: rgba(0, 0, 0, 0.03);
     --comp-aboutbuffer-header-bg: var(--brand-primary);
     --brand-link-normal: var(--brand-primary);
     --brand-link--hover: var(--brand-primary-hover);
-    --brand-shadow: rgba(0, 0, 0, 0.1);
+    --brand-shadow: rgba(0, 0, 0, 0.2);
     --comp-border: transparent;
+    --brand-input-border: #333;
+    --brand-input-fg: #d4d4d4;
+    --brand-input-bg: transparent;
 }
 
 /* ---- Global Font ---- */
@@ -44,171 +47,248 @@
     font-family: 'Nunito', sans-serif !important;
 }
 
+/* Esconde a lateral direita */
+.kiwi-startup-common-section {
+    display: none !important;
+}
+
 .kiwi-wrap {
     --kiwi-nick-brightness: 60;
 }
 
-/* ---- Remove all borders ---- */
-.kiwi-header {
-    border-bottom: none !important;
-}
-
-.kiwi-controlinput {
-    border-top: none !important;
-}
-
-.kiwi-container--sidebar-open .kiwi-sidebar {
-    border: none !important;
-}
-
-.kiwi-container-toggledraw-statebrowser {
-    border-right: none !important;
-}
-
-.kiwi-container-toggledraw-sidebar {
-    border-left: none !important;
-}
-
+/* ---- Remove borders ---- */
+.kiwi-header { border-bottom: none !important; }
+.kiwi-controlinput { border-top: none !important; }
+.kiwi-container--sidebar-open .kiwi-sidebar { border: none !important; }
+.kiwi-container-toggledraw-statebrowser { border-right: none !important; }
+.kiwi-container-toggledraw-sidebar { display: none !important; }
 .kiwi-statebrowser-channels .kiwi-statebrowser-channel {
     border-bottom: none !important;
     color: #dedede;
 }
-
 .kiwi-messagelist-message--modern {
-    border-top-color: #2d2d2d !important;
+    border-top-color: #252525 !important;
 }
 
-/* ---- Hide StateBrowser (server/channel sidebar) ---- */
+/* ---- Hide StateBrowser + right elements ---- */
 .kiwi-statebrowser {
     display: none !important;
     box-shadow: none !important;
 }
+.kiwi-container-toggledraw-statebrowser { display: none !important; }
+.kiwi-container-toggledraw-sidebar { display: none !important; }
+.kiwi-sidebar { display: none !important; }
+.kiwi-workspace { margin-left: 0 !important; margin-right: 0 !important; }
+.kiwi-container { margin-left: 0 !important; margin-right: 0 !important; }
+.kiwi-wrap .kiwi-statebrowser { width: 0 !important; }
 
-.kiwi-container-toggledraw-statebrowser {
-    display: none !important;
+/* Garante que nada "vaze" fora da tela de boas-vindas */
+body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
+    background: #1a1a1a !important;
+    overflow-x: hidden !important;
 }
 
-/* Adjust workspace to use full width when sidebar is hidden */
-.kiwi-workspace {
-    margin-left: 0 !important;
-}
+/* ================================================================
+   WELCOME SCREEN — Wood Background + Glass Card
+   ================================================================ */
 
-.kiwi-container {
-    margin-left: 0 !important;
-}
-
-.kiwi-wrap .kiwi-statebrowser {
-    width: 0 !important;
-}
-
-/* ---- Welcome Screen: Centered ---- */
 .kiwi-welcome-simple {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     flex: 1 !important;
+    width: 100% !important;
     min-height: 100% !important;
     height: 100% !important;
-    background: var(--brand-default-bg) !important;
+    padding: 24px !important;
+    box-sizing: border-box !important;
+    background-image: url('../../img/wood.jpg') !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    position: relative !important;
+    overflow: hidden !important;
 }
 
+/* Dark translucent overlay on the wood */
+.kiwi-welcome-simple::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        160deg,
+        rgba(5, 3, 2, 0.72) 0%,
+        rgba(10, 7, 4, 0.65) 100%
+    );
+    z-index: 0;
+}
+
+/* Glass card — centered, full available width */
 .kiwi-welcome-simple-form {
-    max-width: 400px !important;
+    position: relative !important;
+    z-index: 1 !important;
     width: 100% !important;
-    text-align: center !important;
-    padding: 40px 30px !important;
+    max-width: 420px !important;
     margin: 0 auto !important;
+    text-align: center !important;
+    padding: 52px 44px !important;
+    box-sizing: border-box !important;
+    background: rgba(12, 9, 7, 0.52) !important;
+    backdrop-filter: blur(20px) saturate(1.4) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(1.4) !important;
+    border: 1px solid rgba(255, 255, 255, 0.09) !important;
+    border-radius: 24px !important;
+    box-shadow:
+        0 32px 80px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(66, 185, 146, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
 }
 
-/* Logo centralizado acima do campo de nickname */
+/* Logo */
 .kiwi-welcome-simple-form::before {
     content: '';
     display: block;
-    width: 96px;
-    height: 96px;
+    width: 88px;
+    height: 88px;
     background-image: url('../../favicon.png');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    margin: 0 auto 24px auto;
+    margin: 0 auto 28px auto;
+    filter: drop-shadow(0 4px 16px rgba(66, 185, 146, 0.35));
 }
 
-.kiwi-welcome-simple-form .u-submit {
-    background-color: var(--brand-primary) !important;
-    color: #fff !important;
-    border: none !important;
-    border-radius: 6px !important;
-    padding: 10px 24px !important;
-    font-family: 'Nunito', sans-serif !important;
+/* Title inside the form */
+.kiwi-welcome-simple-form h2,
+.kiwi-welcome-simple-form .kiwi-welcome-simple-form-title {
+    color: rgba(255, 255, 255, 0.92) !important;
+    font-size: 1.35rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em !important;
+    margin-bottom: 28px !important;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Labels */
+.kiwi-welcome-simple-form label,
+.kiwi-welcome-simple-form .u-form label {
+    color: rgba(255, 255, 255, 0.55) !important;
+    font-size: 0.78rem !important;
     font-weight: 600 !important;
-    font-size: 0.9rem !important;
-    cursor: pointer;
-    transition: background 0.2s ease;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
 }
 
-.kiwi-welcome-simple-form .u-submit:hover {
-    background-color: var(--brand-primary-hover) !important;
-}
-
-/* ---- Clean input styling ---- */
+/* Nick input */
 .kiwi-welcome-simple-form .u-input-text input,
 .kiwi-welcome-simple-form .u-form .u-input {
     border: none !important;
-    border-bottom: 2px solid #333 !important;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.18) !important;
     border-radius: 0 !important;
     background: transparent !important;
-    color: var(--brand-default-fg) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
     font-family: 'Nunito', sans-serif !important;
-    padding: 8px 4px !important;
-    transition: border-color 0.2s ease;
+    font-size: 1.05rem !important;
+    padding: 10px 4px !important;
+    text-align: center !important;
+    transition: border-color 0.25s ease !important;
+    caret-color: var(--brand-primary) !important;
 }
-
+.kiwi-welcome-simple-form .u-input-text input::placeholder,
+.kiwi-welcome-simple-form .u-form .u-input::placeholder {
+    color: rgba(255, 255, 255, 0.28) !important;
+}
 .kiwi-welcome-simple-form .u-input-text input:focus,
 .kiwi-welcome-simple-form .u-form .u-input:focus {
     border-bottom-color: var(--brand-primary) !important;
+    box-shadow: 0 2px 0 rgba(66, 185, 146, 0.2) !important;
 }
 
-/* Cleaner buttons globally */
+/* Submit button */
+.kiwi-welcome-simple-form .u-submit,
+.kiwi-welcome-simple-form button[type="submit"] {
+    background: var(--brand-primary) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 12px 32px !important;
+    font-family: 'Nunito', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    letter-spacing: 0.04em !important;
+    cursor: pointer !important;
+    margin-top: 8px !important;
+    width: 100% !important;
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease !important;
+    box-shadow: 0 4px 20px rgba(66, 185, 146, 0.3) !important;
+}
+.kiwi-welcome-simple-form .u-submit:hover,
+.kiwi-welcome-simple-form button[type="submit"]:hover {
+    background: var(--brand-primary-hover) !important;
+    box-shadow: 0 6px 28px rgba(66, 185, 146, 0.45) !important;
+    transform: translateY(-1px) !important;
+}
+.kiwi-welcome-simple-form .u-submit:active,
+.kiwi-welcome-simple-form button[type="submit"]:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 12px rgba(66, 185, 146, 0.3) !important;
+}
+
+/* Error state */
+.kiwi-welcome-simple-error .u-input-text input {
+    border-bottom-color: var(--brand-error) !important;
+}
+.kiwi-welcome-simple-form .kiwi-welcome-simple-error-text {
+    color: #ff7b7b !important;
+    font-size: 0.82rem !important;
+    margin-top: 6px !important;
+}
+
+/* Help links */
+.kiwi-welcome-simple .help,
+.kiwi-welcome-simple .help a {
+    color: rgba(255, 255, 255, 0.38) !important;
+    font-size: 0.8rem !important;
+}
+.kiwi-welcome-simple .help a:hover {
+    color: var(--brand-primary) !important;
+}
+
+/* ================================================================
+   GLOBAL BUTTONS
+   ================================================================ */
 .u-button-primary {
     border: none !important;
-    border-radius: 6px !important;
+    border-radius: 8px !important;
     font-family: 'Nunito', sans-serif !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
 }
-
 .u-button-secondary {
     border: none !important;
-    border-radius: 6px !important;
+    border-radius: 8px !important;
     font-family: 'Nunito', sans-serif !important;
 }
 
-/* ---- Dark overrides ---- */
+/* ================================================================
+   DARK OVERRIDES — chat interface
+   ================================================================ */
 .u-tabbed-view-tabs {
-    background: #2f2f2f;
+    background: #222;
     border-bottom-color: transparent;
 }
 .u-tabbed-view-tabs .u-tabbed-view-tab {
     border-bottom-color: transparent;
 }
-
 .u-form select {
     background-color: var(--brand-primary);
-    color: #000000;
+    color: #000;
 }
-
-button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start {
-    color: #fff;
-}
-
-.kiwi-welcome-znc h2 {
-    color: var(--brand-default-bg);
-}
-
+button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start { color: #fff; }
+.kiwi-welcome-znc h2 { color: var(--brand-default-bg); }
 .kiwi-welcome-znc-form .u-input-text {
     background: transparent;
     color: var(--brand-default-bg);
 }
-
 .kiwi-statebrowser-newchannel-inputwrap,
 .kiwi-statebrowser-newnetwork .u-button,
 .kiwi-header-option a:hover,
@@ -223,7 +303,6 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start {
 .kiwi-networksettings .kiwi-title {
     color: var(--brand-default-fg);
 }
-
 .kiwi-notconnected-button {
     border-color: var(--brand-default-fg);
 }
@@ -232,14 +311,12 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start {
     color: var(--brand-default-bg);
     border-color: var(--brand-default-fg);
 }
-
 .kiwi-statebrowser-channel-leave {
     background: transparent;
     color: var(--brand-default-fg);
 }
-
 .kiwi-network-name-options {
-    background-color: #000;
+    background-color: #0a0a0a;
     color: var(--brand-default-fg);
 }
 .kiwi-network-name-option:hover,
@@ -247,49 +324,24 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start {
     background-color: var(--brand-primary);
     color: #fff;
 }
-
-.kiwi-messagelist-seperator {
-    border-top: 2px dashed #00b100;
-}
-
-.kiwi-messagelist-message--highlight {
-    background-color: #404040;
-}
-
-.kiwi-messagelist-message-notice {
-    background: #3c3729;
-}
-
+.kiwi-messagelist-seperator { border-top: 2px dashed #00b100; }
+.kiwi-messagelist-message--highlight { background-color: #2a2a2a; }
+.kiwi-messagelist-message-notice { background: #2e2a20; }
 .kiwi-statebrowser-channelfilter input,
 .kiwi-statebrowser-channels-info .kiwi-statebrowser-newchannel-inputwrap input {
     background-color: var(--brand-default-fg);
     color: var(--brand-default-bg);
 }
+.kiwi-messagelist-message.kiwi-messagelist-message--highlight { background: #282828; }
+.kiwi-container-toggledraw-statebrowser-messagecount { color: #f1f1f1; }
+.kiwi-messagelist-message--info-open { background-color: #252525; }
+.kiwi-messagelist-message--info-open .u-link { color: #fff; }
+.kiwi-welcome-simple-start { color: #fff !important; }
+.kiwi-header-option--active a { color: #e4e4e4 !important; }
 
-.kiwi-messagelist-message.kiwi-messagelist-message--highlight {
-    background: #2d2d2d;
-}
-
-.kiwi-container-toggledraw-statebrowser-messagecount {
-    color: #f1f1f1;
-}
-
-.kiwi-messagelist-message--info-open {
-    background-color: #2d2d2d;
-}
-.kiwi-messagelist-message--info-open .u-link {
-    color: #fff;
-}
-
-.kiwi-welcome-simple-start {
-    color: #fff !important;
-}
-
-.kiwi-header-option--active a {
-    color: #e4e4e4 !important;
-}
-
-/* IRC Text Colours */
+/* ================================================================
+   IRC TEXT COLOURS
+   ================================================================ */
 .irc-fg-colour-white { color: #fff; }
 .irc-fg-colour-black { color: #000; }
 .irc-fg-colour-blue { color: #00f; }

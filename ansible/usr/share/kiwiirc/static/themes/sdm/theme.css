@@ -1,54 +1,39 @@
 @import '../common/base.css';
 
 :root {
-    /* Primary Variables */
     --brand-primary: #42b992;
     --brand-primary-hover: #5ec9a6;
-    --brand-midtone: #f0f0f0;
+    --brand-midtone: #ebebeb;
     --brand-darktone: #969696;
-    --brand-default-bg: #fff;
+    --brand-default-bg: #ffffff;
     --brand-default-fg: #2d2d2d;
-
-    /* Warning colors */
     --brand-notice: #f6c358;
     --brand-warning: #fcb46e;
     --brand-error: #e05555;
-
-    /* Input elements */
-    --brand-input-border: #e8e8e8;
-    --brand-input-fg: #4a4a4a;
-    --brand-input-bg: transparent;
-
-    /* Connection Indicator top */
     --comp-workspace-before-bg: var(--brand-primary);
     --comp-bg-kiwi-workspace--disconnected-after-bg: var(--brand-error);
-
-    /* Container Header */
     --comp-header-bg: var(--brand-default-bg);
     --comp-header-name-fg: var(--brand-default-fg);
     --comp-header-option-active-fg: var(--brand-default-bg);
     --comp-header-option-active-bg: var(--brand-primary);
-
-    /* StateBrowser */
     --comp-statebrowser-fg: #fff;
     --comp-statebrowser-bg: var(--brand-default-fg);
     --comp-statebrowser-bg-networkname: #454545;
-    --comp-statebrowser-channel-active-bg: #ffffff0d;
+    --comp-statebrowser-channel-active-bg: rgba(255, 255, 255, 0.08);
     --comp-statebrowser-channel-active-fg: #fff;
     --comp-usermenu-open-bg: #0e0e0e;
     --comp-statebrowser-network-border: #656565;
-
-    /* Sidebars ( Right Side ) */
     --comp-sidebar-bg: #fff;
     --comp-sidebar-fg: #2d2d2d;
     --comp-aboutbuffer-bg: rgba(0, 0, 0, 0.02);
     --comp-aboutbuffer-header-bg: #42b992;
-
-    /* Misc */
     --brand-link-normal: var(--brand-primary);
     --brand-link--hover: var(--brand-primary-hover);
     --brand-shadow: rgba(0, 0, 0, 0.06);
     --comp-border: transparent;
+    --brand-input-border: #e8e8e8;
+    --brand-input-fg: #4a4a4a;
+    --brand-input-bg: transparent;
 }
 
 /* ---- Global Font ---- */
@@ -62,143 +47,208 @@
     font-family: 'Nunito', sans-serif !important;
 }
 
-/* ---- Remove all borders ---- */
-.kiwi-header {
-    border-bottom: none !important;
-}
-
-.kiwi-controlinput {
-    border-top: none !important;
-}
-
-.kiwi-container--sidebar-open .kiwi-sidebar {
-    border: none !important;
-}
-
-.kiwi-container-toggledraw-statebrowser {
-    border-right: none !important;
-}
-
-.kiwi-container-toggledraw-sidebar {
-    border-left: none !important;
-}
-
-.kiwi-statebrowser-channels .kiwi-statebrowser-channel {
-    border-bottom: none !important;
-}
-
-.kiwi-messagelist-message--modern {
-    border-top-color: var(--brand-midtone) !important;
-}
-
-/* ---- Hide StateBrowser (server/channel sidebar) ---- */
-.kiwi-statebrowser {
+/* Esconde a lateral direita */
+.kiwi-startup-common-section {
     display: none !important;
 }
 
-.kiwi-container-toggledraw-statebrowser {
-    display: none !important;
+/* ---- Remove borders ---- */
+.kiwi-header { border-bottom: none !important; }
+.kiwi-controlinput { border-top: none !important; }
+.kiwi-container--sidebar-open .kiwi-sidebar { border: none !important; }
+.kiwi-container-toggledraw-statebrowser { border-right: none !important; }
+.kiwi-container-toggledraw-sidebar { display: none !important; }
+.kiwi-statebrowser-channels .kiwi-statebrowser-channel { border-bottom: none !important; }
+.kiwi-messagelist-message--modern { border-top-color: var(--brand-midtone) !important; }
+
+/* ---- Hide StateBrowser + right elements ---- */
+.kiwi-statebrowser { display: none !important; }
+.kiwi-container-toggledraw-statebrowser { display: none !important; }
+.kiwi-container-toggledraw-sidebar { display: none !important; }
+.kiwi-sidebar { display: none !important; }
+.kiwi-workspace { margin-left: 0 !important; margin-right: 0 !important; }
+.kiwi-container { margin-left: 0 !important; margin-right: 0 !important; }
+.kiwi-wrap .kiwi-statebrowser { width: 0 !important; }
+
+body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
+    background: #ffffff !important;
+    overflow-x: hidden !important;
 }
 
-/* Adjust workspace to use full width when sidebar is hidden */
-.kiwi-workspace {
-    margin-left: 0 !important;
-}
+/* ================================================================
+   WELCOME SCREEN — Wood Background + Glass Card (Light)
+   ================================================================ */
 
-.kiwi-container {
-    margin-left: 0 !important;
-}
-
-.kiwi-wrap .kiwi-statebrowser {
-    width: 0 !important;
-}
-
-/* ---- Welcome Screen: Centered ---- */
 .kiwi-welcome-simple {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     flex: 1 !important;
+    width: 100% !important;
     min-height: 100% !important;
     height: 100% !important;
-    background: var(--brand-default-bg) !important;
+    padding: 24px !important;
+    box-sizing: border-box !important;
+    background-image: url('../../img/wood.jpg') !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    position: relative !important;
+    overflow: hidden !important;
 }
 
+/* Overlay — mais suave no tema claro */
+.kiwi-welcome-simple::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        160deg,
+        rgba(5, 3, 2, 0.58) 0%,
+        rgba(8, 5, 3, 0.50) 100%
+    );
+    z-index: 0;
+}
+
+/* Glass card */
 .kiwi-welcome-simple-form {
-    max-width: 400px !important;
+    position: relative !important;
+    z-index: 1 !important;
     width: 100% !important;
-    text-align: center !important;
-    padding: 40px 30px !important;
+    max-width: 420px !important;
     margin: 0 auto !important;
+    text-align: center !important;
+    padding: 52px 44px !important;
+    box-sizing: border-box !important;
+    background: rgba(255, 253, 250, 0.14) !important;
+    backdrop-filter: blur(20px) saturate(1.6) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(1.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.22) !important;
+    border-radius: 24px !important;
+    box-shadow:
+        0 32px 80px rgba(0, 0, 0, 0.45),
+        0 0 0 1px rgba(66, 185, 146, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
 }
 
-/* Logo centralizado acima do campo de nickname */
+/* Logo */
 .kiwi-welcome-simple-form::before {
     content: '';
     display: block;
-    width: 96px;
-    height: 96px;
+    width: 88px;
+    height: 88px;
     background-image: url('../../favicon.png');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    margin: 0 auto 24px auto;
+    margin: 0 auto 28px auto;
+    filter: drop-shadow(0 4px 16px rgba(66, 185, 146, 0.4));
 }
 
-.kiwi-welcome-simple-form .u-submit {
-    background-color: var(--brand-primary) !important;
-    color: #fff !important;
-    border: none !important;
-    border-radius: 6px !important;
-    padding: 10px 24px !important;
-    font-family: 'Nunito', sans-serif !important;
+/* Títulos */
+.kiwi-welcome-simple-form h2,
+.kiwi-welcome-simple-form .kiwi-welcome-simple-form-title {
+    color: rgba(255, 255, 255, 0.95) !important;
+    font-size: 1.35rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em !important;
+    margin-bottom: 28px !important;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Labels */
+.kiwi-welcome-simple-form label,
+.kiwi-welcome-simple-form .u-form label {
+    color: rgba(255, 255, 255, 0.6) !important;
+    font-size: 0.78rem !important;
     font-weight: 600 !important;
-    font-size: 0.9rem !important;
-    cursor: pointer;
-    transition: background 0.2s ease;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
 }
 
-.kiwi-welcome-simple-form .u-submit:hover {
-    background-color: var(--brand-primary-hover) !important;
-}
-
-/* ---- Clean input styling ---- */
+/* Nick input */
 .kiwi-welcome-simple-form .u-input-text input,
 .kiwi-welcome-simple-form .u-form .u-input {
     border: none !important;
-    border-bottom: 2px solid var(--brand-midtone) !important;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.28) !important;
     border-radius: 0 !important;
     background: transparent !important;
+    color: rgba(255, 255, 255, 0.92) !important;
     font-family: 'Nunito', sans-serif !important;
-    padding: 8px 4px !important;
-    transition: border-color 0.2s ease;
+    font-size: 1.05rem !important;
+    padding: 10px 4px !important;
+    text-align: center !important;
+    transition: border-color 0.25s ease !important;
+    caret-color: var(--brand-primary) !important;
 }
-
+.kiwi-welcome-simple-form .u-input-text input::placeholder,
+.kiwi-welcome-simple-form .u-form .u-input::placeholder {
+    color: rgba(255, 255, 255, 0.32) !important;
+}
 .kiwi-welcome-simple-form .u-input-text input:focus,
 .kiwi-welcome-simple-form .u-form .u-input:focus {
     border-bottom-color: var(--brand-primary) !important;
+    box-shadow: 0 2px 0 rgba(66, 185, 146, 0.25) !important;
 }
 
-/* Cleaner buttons globally */
+/* Submit button */
+.kiwi-welcome-simple-form .u-submit,
+.kiwi-welcome-simple-form button[type="submit"] {
+    background: var(--brand-primary) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 12px 32px !important;
+    font-family: 'Nunito', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    letter-spacing: 0.04em !important;
+    cursor: pointer !important;
+    margin-top: 8px !important;
+    width: 100% !important;
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease !important;
+    box-shadow: 0 4px 20px rgba(66, 185, 146, 0.35) !important;
+}
+.kiwi-welcome-simple-form .u-submit:hover,
+.kiwi-welcome-simple-form button[type="submit"]:hover {
+    background: var(--brand-primary-hover) !important;
+    box-shadow: 0 6px 28px rgba(66, 185, 146, 0.5) !important;
+    transform: translateY(-1px) !important;
+}
+.kiwi-welcome-simple-form .u-submit:active,
+.kiwi-welcome-simple-form button[type="submit"]:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 12px rgba(66, 185, 146, 0.3) !important;
+}
+
+/* Help links */
+.kiwi-welcome-simple .help,
+.kiwi-welcome-simple .help a {
+    color: rgba(255, 255, 255, 0.4) !important;
+    font-size: 0.8rem !important;
+}
+.kiwi-welcome-simple .help a:hover {
+    color: var(--brand-primary) !important;
+}
+
+/* ================================================================
+   GLOBAL BUTTONS
+   ================================================================ */
 .u-button-primary {
     border: none !important;
-    border-radius: 6px !important;
+    border-radius: 8px !important;
     font-family: 'Nunito', sans-serif !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
 }
-
 .u-button-secondary {
     border: none !important;
-    border-radius: 6px !important;
+    border-radius: 8px !important;
     font-family: 'Nunito', sans-serif !important;
 }
 
-/* ---- Smoother StateBrowser shadow ---- */
-.kiwi-statebrowser {
-    box-shadow: none !important;
-}
-
-/* IRC Text Colours */
+/* ================================================================
+   IRC TEXT COLOURS
+   ================================================================ */
 .irc-fg-colour-white { color: #fff; }
 .irc-fg-colour-black { color: #000; }
 .irc-fg-colour-blue { color: #00f; }

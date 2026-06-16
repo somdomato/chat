@@ -1,6 +1,6 @@
 {
     "start_button": "Iniciar",
-    "start_greeting": "Bate-Papo da Rádio Som do Mato",
+    "start_greeting": "Bate-Papo Som do Mato",
     "close": "Fechar",
     "connect": "Ligar",
     "connecting": "A ligar...",
@@ -121,7 +121,7 @@
     "channel_external": "Bloquear mensagens externas ao canal",
     "channel_list_fetch": "Clique no botão actualizar para actualizar a lista de canais",
     "channel_list_nonefound": "Nenhum canal encontrado, tente novamente mais tarde",
-    "container_welcome": "Bate-Papo da Rádio Som do Mato",
+    "container_welcome": "Bate-Papo Som do Mato",
     "container_statebrowser": "Mostrar statebrowser",
     "hide_topic": "Esconder Tópico",
     "display_topic": "Mostrar Tópico",
