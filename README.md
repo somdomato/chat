@@ -934,6 +934,22 @@ Ou via ChanServ (se o canal estiver registrado):
 
 > O modo `+H <entradas>:<segundos>` controla quantas mensagens e por quanto tempo o Ergo mantém por canal. Definir `0:0` desativa o armazenamento para aquele canal.
 
+**3. Verificar o modo de histórico atualmente ajustado no canal:**
+
+```irc
+/mode #canal
+```
+
+A resposta lista os modos ativos do canal; procure por `+H <entradas>:<segundos>` na saída (se o modo `+H` não aparecer, o canal está usando o padrão da rede, definido em `ircd.yaml`).
+
+**4. Voltar ao padrão (remover o override e usar o valor da rede):**
+
+```irc
+/mode #canal -H
+```
+
+Isso remove o modo `+H` do canal, fazendo-o voltar a usar o limite padrão definido na seção `history` do `ircd.yaml` (veja abaixo).
+
 ### Desativar histórico para toda a rede
 
 Edite `/usr/share/ergo/ircd.yaml` e ajuste a seção `history`:
@@ -964,6 +980,34 @@ sudo systemctl reload somdomato-ergo
 # Ou via IRC (requer oper)
 /quote REHASH
 ```
+
+**Verificar a configuração de histórico atualmente ajustada:**
+
+```bash
+# Ver a seção history do arquivo de configuração em uso
+grep -A 6 "^history:" /usr/share/ergo/ircd.yaml
+```
+
+**Voltar aos padrões da rede:**
+
+Os valores padrão do Ergo para a seção `history` são:
+
+```yaml
+history:
+    enabled: true
+    channel-length: 2048
+    client-length: 256
+    autoresize-window: 7d
+    autoreplay-on-join: 0
+    chathistory-maxmessages: 100
+    znc-maxmessages: 2048
+    query-cutoff: server-time
+    target-expiration:
+        enabled: false
+        duration: 1y
+```
+
+Restaure esses valores no `ircd.yaml` e recarregue a configuração (`systemctl reload somdomato-ergo` ou `/quote REHASH`).
 
 ### Apagar histórico de um usuário (DMs)
 
