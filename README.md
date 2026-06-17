@@ -613,6 +613,82 @@ cd ansible
 ansible-playbook playbook.yml -i ananke, --vault-password-file=.vault_pass -vvv
 ```
 
+## 🎨 Temas do KiwiIRC e Gamja
+
+Guia completo para editar a aparência visual do chat, testar localmente e publicar em produção.
+
+### Onde está cada coisa
+
+| O quê | Onde | Observação |
+|---|---|---|
+| Temas do KiwiIRC | `ansible/usr/share/kiwiirc/static/themes/<nome>/theme.css` | Cada tema importa `../common/base.css` e sobrescreve variáveis/seletores |
+| Estilos base (compartilhados por todos os temas) | `ansible/usr/share/kiwiirc/static/themes/common/base.css` | Editado raramente; afeta todos os temas |
+| Tema ativo / lista de temas disponíveis | `ansible/etc/kiwiirc/client.json` (chave `theme` e `themes`) | Em produção. No Docker local, ver `docker/kiwiirc.client.json` |
+| Imagens usadas pelos temas (ex. `wood.jpg`, `favicon.png`) | `ansible/usr/share/kiwiirc/static/img/` | Referenciadas nos `theme.css` com caminho relativo `../../img/...` |
+| Código-fonte completo do Gamja | `ansible/usr/share/gamja/` | Vendorizado por completo (não é só CSS) — `style.css` na raiz controla o visual |
+| Config do Gamja | `ansible/usr/share/gamja/config.json` (prod) / `docker/gamja.config.json` (Docker) | |
+
+O **KiwiIRC** é distribuído como build pronto (baixado em `.zip` direto do GitHub pelo playbook/Dockerfile) — por isso só os arquivos em `static/themes/` e `static/img/` são editáveis aqui; o restante (`static/js`, `static/css/app.*.css`) vem do release oficial. Já o **Gamja** está vendorizado como código-fonte completo e precisa ser compilado (`npm run build`, via Parcel) a cada alteração.
+
+### Como descobrir os nomes de classe certos para estilizar
+
+Os temas do KiwiIRC sobrescrevem classes CSS de componentes Vue já compilados (não há acesso aos `.vue` originais aqui, só ao bundle minificado em `static/js/app.*.js`). Para confirmar a estrutura real do HTML antes de escrever uma regra nova:
+
+```bash
+# Procura nomes de classe relacionados a um termo (ex.: "header", "sidebar")
+grep -o "kiwi-[a-zA-Z-]*header[a-zA-Z-]*" ansible/usr/share/kiwiirc/static/js/app.*.js | sort -u
+
+# Mostra o trecho do template Vue renderizado em volta de uma classe específica
+grep -o ".\{80\}kiwi-header-option-nicklist.\{120\}" ansible/usr/share/kiwiirc/static/js/app.*.js
+```
+
+Ou, mais simples: abra o DevTools do navegador (F12 → Elements) na instância local e inspecione o elemento diretamente.
+
+### Editar e testar localmente (rebuild)
+
+```bash
+# 1. Edite os arquivos desejados, por exemplo:
+#    ansible/usr/share/kiwiirc/static/themes/sdm-dark/theme.css
+#    ansible/usr/share/gamja/style.css
+
+# 2. Suba (ou reconstrua) a stack local — isso reempacota o tema do KiwiIRC
+#    e recompila o Gamja (stage "gamja-builder" no docker/Dockerfile.nginx)
+docker compose -f docker/docker-compose.yml up -d --build nginx
+
+# 3. Acesse no navegador
+#    KiwiIRC → http://localhost:9080
+#    Gamja   → http://localhost:9081
+```
+
+> Dica: o nginx local serve `static/themes/` com `Cache-Control: no-store` (ver `docker/nginx.conf`), então um simples reload da página já reflete mudanças de CSS — só é necessário `--build` quando o **Gamja** for alterado (precisa recompilar) ou quando o container ainda não existe.
+
+### Publicar em produção
+
+| Cenário | Comando | O que faz |
+|---|---|---|
+| Só mudei CSS/tema do KiwiIRC ou arquivos de config | `./scripts/sync.sh` | `rsync` direto dos diretórios `kiwiirc/`, `gamja/` etc. para a VPS e reinicia os serviços. Mais rápido, não recompila nada. |
+| Mudei código-fonte do Gamja (componentes `.js`, `style.css`) | `./scripts/ansible.sh` (playbook completo) | Reexecuta a task "Executar build do Gamja (parcel)" do `ansible/playbook.yml`, ou seja, roda `npm run build` no servidor antes de publicar |
+
+Depois de publicar, confira em produção:
+
+```bash
+sudo systemctl status somdomato-kiwiirc nginx
+curl -I https://chat.somdomato.com
+```
+
+### Reversão de alterações nos botões do header (Configurações / Informações)
+
+Os botões de **Configurações** (engrenagem) e **Informações** (about) do header do KiwiIRC foram intencionalmente ocultados nos temas `sdm` e `sdm-dark` (eles não tinham nenhuma função útil no modo restrito/simplificado usado aqui). O botão de **Lista de usuários** foi mantido e voltou a funcionar — antes ele estava quebrado porque o painel lateral (`.kiwi-sidebar`) era escondido por completo via CSS, o que também desabilitava a lista de usuários.
+
+Para reexibir os botões de Configurações/Informações no futuro, localize e remova o bloco abaixo em **ambos** os arquivos (`static/themes/sdm/theme.css` e `static/themes/sdm-dark/theme.css`) — ele está marcado com um comentário `REVERSÃO:`:
+
+```css
+.kiwi-header-option-settings,
+.kiwi-header-option-about {
+    display: none !important;
+}
+```
+
 ## 🔄 Atualizações
 
 ### Atualizar KiwiIRC
@@ -826,6 +902,83 @@ openssl s_client -connect irc.somdomato.com:6698
 # 5. Logs de erro
 sudo journalctl -u somdomato-soju -n 50
 ```
+
+---
+
+## 📜 Gerenciar Histórico do Ergo (HistServ)
+
+O Ergo armazena histórico de mensagens por canal e por usuário. O serviço **HistServ** permite apagar histórico já gravado, enquanto a configuração em `ircd.yaml` controla se o histórico será gravado daqui em diante.
+
+### Desativar histórico de um canal específico
+
+**1. Apagar o histórico armazenado (HistServ):**
+
+```irc
+# Apaga todo o histórico gravado do canal (requer oper ou ser fundador do canal)
+/msg HistServ FORGET #canal
+```
+
+**2. Impedir que novo histórico seja gravado no canal:**
+
+Como IRC oper, defina o modo de histórico do canal para zero entradas:
+
+```irc
+/mode #canal +H 0:0
+```
+
+Ou via ChanServ (se o canal estiver registrado):
+
+```irc
+/msg ChanServ SET #canal HISTORY off
+```
+
+> O modo `+H <entradas>:<segundos>` controla quantas mensagens e por quanto tempo o Ergo mantém por canal. Definir `0:0` desativa o armazenamento para aquele canal.
+
+### Desativar histórico para toda a rede
+
+Edite `/usr/share/ergo/ircd.yaml` e ajuste a seção `history`:
+
+```yaml
+history:
+    # Desativar completamente o armazenamento de histórico
+    enabled: false
+```
+
+Ou, para manter o recurso ativo mas sem guardar nenhuma mensagem:
+
+```yaml
+history:
+    enabled: true
+    channel-length: 0      # Nenhuma mensagem por canal
+    client-length: 0       # Nenhuma mensagem por usuário (DMs)
+    query-cutoff: none     # Sem limite de busca retroativa
+    persist: false         # Não persistir em disco (apenas memória)
+```
+
+Após editar, recarregue a configuração sem derrubar o servidor:
+
+```bash
+# Recarregar config em runtime (sem desconectar usuários)
+sudo systemctl reload somdomato-ergo
+
+# Ou via IRC (requer oper)
+/quote REHASH
+```
+
+### Apagar histórico de um usuário (DMs)
+
+```irc
+# Apaga todo o histórico de mensagens privadas do próprio usuário
+/msg HistServ FORGET *
+```
+
+### Referência rápida do HistServ
+
+| Comando | Efeito |
+|---------|--------|
+| `/msg HistServ FORGET #canal` | Apaga histórico armazenado do canal |
+| `/msg HistServ FORGET *` | Apaga histórico de DMs do usuário atual |
+| `/msg HistServ HELP` | Lista todos os comandos disponíveis |
 
 ---
 

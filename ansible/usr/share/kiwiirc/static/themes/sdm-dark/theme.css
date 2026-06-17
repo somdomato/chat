@@ -1,3 +1,6 @@
+/* Tema "SDM-Dark" — variante escura do tema customizado do KiwiIRC.
+   Veja o README.md ("Temas do KiwiIRC e Gamja") para o fluxo completo de
+   edição, rebuild (docker compose) e deploy (scripts/sync.sh / ansible.sh). */
 @import '../common/base.css';
 
 :root {
@@ -66,17 +69,27 @@
     border-top-color: #252525 !important;
 }
 
-/* ---- Hide StateBrowser + right elements ---- */
+/* ---- Hide StateBrowser (channel list, left side) ---- */
 .kiwi-statebrowser {
     display: none !important;
     box-shadow: none !important;
 }
 .kiwi-container-toggledraw-statebrowser { display: none !important; }
-.kiwi-container-toggledraw-sidebar { display: none !important; }
-.kiwi-sidebar { display: none !important; }
 .kiwi-workspace { margin-left: 0 !important; margin-right: 0 !important; }
 .kiwi-container { margin-left: 0 !important; margin-right: 0 !important; }
 .kiwi-wrap .kiwi-statebrowser { width: 0 !important; }
+
+/* ---- Header: oculta "Configurações" e "Informações", mantém "Lista de usuários" ----
+   O painel direito (.kiwi-sidebar) é compartilhado pelos 3 botões do header
+   (nicklist / settings / about). Antes esses dois seletores escondiam o
+   painel inteiro (`.kiwi-sidebar` e `.kiwi-container-toggledraw-sidebar`),
+   o que também quebrava o botão de lista de usuários. Agora só os botões
+   de settings/about são ocultados; o painel volta a abrir normalmente.
+   REVERSÃO: para exibir os 3 botões de novo, remova/comente o bloco abaixo. */
+.kiwi-header-option-settings,
+.kiwi-header-option-about {
+    display: none !important;
+}
 
 /* Garante que nada "vaze" fora da tela de boas-vindas */
 body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
@@ -107,10 +120,13 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     height: 100% !important;
     padding: 24px !important;
     box-sizing: border-box !important;
+    /* wood.jpg é uma textura repetível (1000x667px); um tile pequeno em
+       background-repeat evita o efeito "gigante/borrado" de usar `cover`
+       esticando a imagem inteira na tela. 260x174 mantém a proporção 3:2. */
     background-image: url('../../img/wood.jpg') !important;
-    background-size: cover !important;
+    background-size: 260px 174px !important;
     background-position: center !important;
-    background-repeat: no-repeat !important;
+    background-repeat: repeat !important;
     position: relative !important;
     overflow: hidden !important;
 }
@@ -174,7 +190,11 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
 }
 
-/* Labels */
+/* Labels — o componente <input-text> do KiwiIRC renderiza o <label> como
+   filho direto de .u-input-text, no mesmo wrapper do input. Por isso o
+   fundo/borda do "campo" (cartão) é aplicado em .u-input-text-inputs (que
+   envolve só o <input>) e não em .u-input-text — assim o label fica como
+   legenda solta ACIMA do campo, fora da caixa com borda. */
 .kiwi-welcome-simple-form label,
 .kiwi-welcome-simple-form .u-form label {
     display: block !important;
@@ -187,15 +207,22 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     margin-bottom: 6px !important;
 }
 
-/* Input wrapper */
+/* Wrapper externo (label + campo): apenas espaçamento entre campos, sem fundo/borda */
 .kiwi-welcome-simple-form .u-input-text {
+    background: transparent !important;
+    border: none !important;
+    margin-bottom: 16px !important;
+}
+
+/* Campo (caixa com fundo/borda) — envolve só o <input>, não o label */
+.kiwi-welcome-simple-form .u-input-text-inputs {
     background: rgba(255, 255, 255, 0.07) !important;
     border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
     border-radius: 10px !important;
     transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
     overflow: hidden !important;
 }
-.kiwi-welcome-simple-form .u-input-text:focus-within {
+.kiwi-welcome-simple-form .u-input-text:focus-within .u-input-text-inputs {
     border-color: rgba(66, 185, 146, 0.55) !important;
     box-shadow: 0 0 0 3px rgba(66, 185, 146, 0.12) !important;
 }
@@ -276,6 +303,24 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
 }
 .kiwi-welcome-simple .help a:hover {
     color: var(--brand-primary) !important;
+}
+
+/* Telas pequenas: o padding fixo do wrapper (24px) somado ao padding
+   horizontal do cartão (44px) sobrava pouco espaço útil para o campo de
+   nick/senha em celulares — reduz ambos e o border-radius do cartão. */
+@media (max-width: 480px) {
+    .kiwi-welcome-simple {
+        padding: 12px !important;
+    }
+    .kiwi-welcome-simple-form {
+        padding: 24px 20px !important;
+        border-radius: 18px !important;
+    }
+    .kiwi-welcome-simple-form::before {
+        width: 64px !important;
+        height: 64px !important;
+        margin-bottom: 18px !important;
+    }
 }
 
 /* ================================================================
