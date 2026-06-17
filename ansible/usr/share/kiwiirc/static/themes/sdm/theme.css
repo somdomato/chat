@@ -39,6 +39,26 @@
     --brand-input-bg: transparent;
 }
 
+/* iOS zoom  */
+input[type="color"],
+input[type="date"],
+input[type="datetime"],
+input[type="datetime-local"],
+input[type="email"],
+input[type="month"],
+input[type="number"],
+input[type="password"],
+input[type="search"],
+input[type="tel"],
+input[type="text"],
+input[type="time"],
+input[type="url"],
+input[type="week"],
+select:focus,
+textarea {
+  font-size: 16px;
+}
+
 /* ---- Global Font ---- */
 .kiwi-wrap,
 .kiwi-welcome-simple,
@@ -49,7 +69,6 @@
 .kiwi-statebrowser {
     font-family: 'Nunito', sans-serif !important;
 }
-
 
 /* ---- Remove borders ---- */
 .kiwi-header { border-bottom: none !important; }
@@ -91,6 +110,7 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
 .kiwi-startup-common-section-info {
     display: none !important;
 }
+
 .kiwi-startup-common-section-connection {
     width: 100% !important;
     max-width: 100% !important;
