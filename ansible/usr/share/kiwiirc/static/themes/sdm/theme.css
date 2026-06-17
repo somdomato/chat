@@ -229,8 +229,8 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     overflow: hidden !important;
 }
 .kiwi-welcome-simple-form .u-input-text:focus-within .u-input-text-inputs {
-    border-color: rgba(66, 185, 146, 0.6) !important;
-    box-shadow: 0 0 0 3px rgba(66, 185, 146, 0.14) !important;
+    border: 2px solid rgba(0, 0, 0, 0.6) !important;
+    /* box-shadow: 0 0 0 3px rgba(66, 185, 146, 0.14) !important; */
 }
 
 /* Nick / password input */

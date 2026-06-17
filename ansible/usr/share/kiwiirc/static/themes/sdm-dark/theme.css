@@ -242,8 +242,8 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     overflow: hidden !important;
 }
 .kiwi-welcome-simple-form .u-input-text:focus-within .u-input-text-inputs {
-    border-color: rgba(66, 185, 146, 0.55) !important;
-    box-shadow: 0 0 0 3px rgba(66, 185, 146, 0.12) !important;
+    border: 2px solid rgba(0, 0, 0, 0.55) !important;
+    /* box-shadow: 0 0 0 3px rgba(66, 185, 146, 0.12) !important; */
 }
 
 /* Nick / password input */
@@ -264,10 +264,12 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     outline: none !important;
     box-shadow: none !important;
 }
+
 .kiwi-welcome-simple-form .u-input-text input::placeholder,
 .kiwi-welcome-simple-form .u-form .u-input::placeholder {
     color: rgba(255, 255, 255, 0.22) !important;
 }
+
 .kiwi-welcome-simple-form .u-input-text input:focus,
 .kiwi-welcome-simple-form .u-form .u-input:focus {
     outline: none !important;
