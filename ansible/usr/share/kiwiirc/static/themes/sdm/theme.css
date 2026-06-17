@@ -129,7 +129,7 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     /* wood.jpg é uma textura repetível (1000x667px); um tile pequeno em
        background-repeat evita o efeito "gigante/borrado" de usar `cover`
        esticando a imagem inteira na tela. 260x174 mantém a proporção 3:2. */
-    background-image: url('../../img/wood.png') !important;
+    background-image: url('../../img/wood.webp') !important;
     background-size: 260px 174px !important;
     background-position: center !important;
     background-repeat: repeat !important;
