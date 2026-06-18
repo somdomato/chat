@@ -519,16 +519,18 @@ O `playbook.yml` carrega `group_vars/vault.yml`, que é **criptografado** (Ansib
 [ERROR]: Invalid vars_files file '.../group_vars/vault.yml': Attempting to decrypt but no vault secrets found.
 ```
 
-Resolva passando `--vault-password-file`. O arquivo de senha (`ansible/.vault_pass`, criado por `./scripts/vault.sh setup`) é referenciado como caminho relativo, então o jeito mais simples é rodar de dentro de `ansible/`:
+`ansible/ansible.cfg` já define `vault_password_file = .vault_pass`, então basta rodar **de dentro da pasta `ansible/`** e a senha é lida automaticamente:
 
 ```bash
 cd ansible
-ansible-playbook playbook.yml --syntax-check --vault-password-file=.vault_pass
+ansible-playbook playbook.yml --syntax-check
 ```
 
-Se preferir rodar a partir da raiz do repo (ex.: `ansible-playbook ansible/playbook.yml`), aponte para o caminho completo do arquivo de senha:
+O caminho em `ansible.cfg` é relativo a essa pasta, e o Ansible só carrega esse arquivo automaticamente quando ele está no diretório atual. Rodando a partir da raiz do repo (ex.: `ansible-playbook ansible/playbook.yml`), aponte explicitamente para o config ou para o arquivo de senha:
 
 ```bash
+ANSIBLE_CONFIG=ansible/ansible.cfg ansible-playbook ansible/playbook.yml --syntax-check
+# ou
 ansible-playbook ansible/playbook.yml --syntax-check --vault-password-file=ansible/.vault_pass
 ```
 

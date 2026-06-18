@@ -341,6 +341,40 @@
         persistent: yes
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
 
+    # O nginx (nginx-stable do nginx.org) roda no domínio httpd_t, mas o
+    # arquivo /run/nginx.pid acaba sendo criado com o contexto genérico
+    # var_run_t em vez de httpd_var_run_t (a transição automática do SELinux
+    # não cobre esse caminho neste pacote). Resultado: "open() /run/nginx.pid
+    # failed (13: Permission denied)". Registramos o contexto correto e
+    # garantimos, via tmpfiles.d, que ele seja reaplicado em todo boot —
+    # já que /run é tmpfs e é recriado do zero a cada reinício da VPS.
+    - name: Registrar contexto SELinux correto para /run/nginx.pid
+      community.general.sefcontext:
+        target: '/run/nginx\.pid'
+        setype: httpd_var_run_t
+        state: present
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
+    - name: Garantir que /run/nginx.pid exista com o contexto correto a cada boot
+      ansible.builtin.copy:
+        dest: /etc/tmpfiles.d/nginx.conf
+        content: |
+          f /run/nginx.pid 0644 nginx nginx -
+        mode: '0644'
+      when: is_rhel_family
+
+    - name: Aplicar regra de tmpfiles.d imediatamente
+      ansible.builtin.command: systemd-tmpfiles --create /etc/tmpfiles.d/nginx.conf
+      changed_when: true
+      when: is_rhel_family
+
+    - name: Restaurar contexto SELinux de /run/nginx.pid agora
+      ansible.builtin.command: restorecon -v /run/nginx.pid
+      changed_when: true
+      failed_when: false
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+      notify: Reiniciar Nginx
+
     - name: Verificar quais diretórios de aplicação existem (SELinux)
       ansible.builtin.stat:
         path: "{{ item }}"
@@ -647,6 +681,29 @@
         force: true
       when: refresh_apps
 
+    # Bug do plugin-conference: passa config.setting('configOverwrite') e
+    # config.setting('interfaceConfigOverwrite') direto pro JitsiMeetExternalAPI.
+    # No KiwiIRC atual (Vue 3) isso retorna um Proxy reativo, não um objeto
+    # puro. Quando o external_api tenta repassar essas opções pro iframe via
+    # postMessage, o Firefox lança "Permission denied to access property
+    # '__v_isRef' on cross-origin object" ao tentar clonar o Proxy — o app do
+    # Jitsi nunca termina de inicializar e a tela fica em branco. O patch
+    # clona os objetos (JSON.parse/stringify) antes de passá-los, removendo
+    # a reatividade do Vue.
+    - name: "Patch: remover reatividade do Vue antes de passar config para o JitsiMeetExternalAPI"
+      ansible.builtin.replace:
+        path: /tmp/plugin-conference_build/src/components/JitsiMediaView.vue
+        regexp: "{{ item.regexp }}"
+        replace: "{{ item.replace }}"
+      loop:
+        - regexp: "let configOverwrite = config\\.setting\\('configOverwrite'\\);"
+          replace: "let configOverwrite = JSON.parse(JSON.stringify(config.setting('configOverwrite')));"
+        - regexp: "interfaceConfigOverwrite: config\\.setting\\('interfaceConfigOverwrite'\\),"
+          replace: "interfaceConfigOverwrite: JSON.parse(JSON.stringify(config.setting('interfaceConfigOverwrite'))),"
+      loop_control:
+        label: "{{ item.regexp }}"
+      when: refresh_apps
+
     - name: Instalar dependências do plugin de conferência
       ansible.builtin.shell: npm install
       args:
@@ -827,17 +884,25 @@
         state: present
       when: is_rhel_family
 
-    # O EPEL também empacota nginx, com versão diferente da do
-    # AppStream/ol_addons. Se o nginx core e o nginx-mod-http-geoip2 (que
-    # precisam ter a MESMA versão/ABI) vierem de repositórios diferentes,
-    # o nginx para de iniciar ("module ... version X instead of Y"). Aqui
-    # forçamos os dois a vir do mesmo conjunto de repositórios não-EPEL,
-    # desfazendo qualquer dessincronia que a ativação do EPEL tenha causado.
-    - name: Corrigir possível dessincronia de versão entre nginx e seus módulos
-      ansible.builtin.shell: >
-        dnf distro-sync -y --disablerepo='*[Ee][Pp][Ee][Ll]*' nginx 'nginx-mod-*'
-      register: nginx_distro_sync
-      changed_when: "'Nothing to do' not in nginx_distro_sync.stdout"
+    # O nginx aqui vem do repositório oficial nginx-stable (nginx.org), que
+    # não empacota o módulo geoip2. Por isso o ngx_http_geoip2_module.so é
+    # compilado manualmente a partir do source — e se o nginx.org liberar uma
+    # versão nova (o repo fica habilitado e o dnf update pega), o módulo
+    # antigo passa a ter ABI incompatível ("module ... version X instead of
+    # Y") até ser recompilado. O script cuida da detecção de versão e do
+    # rebuild; é idempotente (sai com "SKIP" se já estiver em sincronia).
+    - name: Copiar script de rebuild do módulo geoip2
+      ansible.builtin.copy:
+        src: files/rebuild-geoip2-module.sh
+        dest: /usr/local/sbin/rebuild-geoip2-module.sh
+        mode: '0755'
+      when: is_rhel_family
+
+    - name: Recompilar o módulo geoip2 se a versão do nginx mudou
+      ansible.builtin.command: /usr/local/sbin/rebuild-geoip2-module.sh
+      register: geoip2_rebuild
+      changed_when: "'REBUILT' in geoip2_rebuild.stdout"
+      notify: Reiniciar Nginx
       when: is_rhel_family
 
     - name: Instalar Prosody (Debian/Ubuntu)

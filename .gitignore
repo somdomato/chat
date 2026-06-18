@@ -8,6 +8,7 @@ logs/
 # Arquivos sensíveis do Ansible
 ansible/.vault_pass
 ansible/group_vars/vault.yml.bak
+ansible/.secrets/
 .ansible/**
 
 # Certificados e chaves
@@ -40,4 +41,3 @@ scripts/legacy/
 # Jitsi Meet (docker-jitsi-meet vendorizado) — segredos e config gerada
 docker/jitsi/.env
 docker/jitsi/.jitsi-meet-cfg/
-ansible/.secrets/
