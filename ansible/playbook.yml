@@ -873,7 +873,11 @@
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
-        mode: '0750'
+        # /var/log/jitsi é compartilhado pelo jicofo e pelo jvb (usuários
+        # diferentes, mesmo grupo "jitsi") — precisa de escrita de grupo
+        # (0770), senão o jvb.sh não consegue criar o jvb.log e o serviço
+        # morre com "Permission denied" no primeiro start.
+        mode: "{{ '0770' if item == '/var/log/jitsi' else '0750' }}"
         owner: "{{ 'jicofo' if 'jicofo' in item else ('jvb' if 'videobridge' in item else 'root') }}"
         group: jitsi
       loop:
@@ -1490,7 +1494,9 @@
         owner: root
         group: root
         mode: "0644"
-      notify: Reiniciar serviços  # Aciona recarregamento se o arquivo mudar
+      notify:  # Aciona recarregamento se o arquivo mudar
+        - Reiniciar serviços
+        - Reiniciar serviços jitsi
       loop:
         - "somdomato-ergo.service"
         - "somdomato-kiwiirc.service"

@@ -511,6 +511,29 @@ working/                           # Backup do que está rodando na VPS
 ./scripts/vault.sh rekey     # Alterar senha
 ```
 
+### Rodar comandos `ansible-playbook` manualmente (syntax-check, lint, --tags, etc)
+
+O `playbook.yml` carrega `group_vars/vault.yml`, que é **criptografado** (Ansible Vault). Qualquer comando `ansible-playbook` — incluindo `--syntax-check`, `ansible-lint` ou execuções parciais com `--tags` — precisa receber a senha do vault, senão falha com:
+
+```
+[ERROR]: Invalid vars_files file '.../group_vars/vault.yml': Attempting to decrypt but no vault secrets found.
+```
+
+Resolva passando `--vault-password-file`. O arquivo de senha (`ansible/.vault_pass`, criado por `./scripts/vault.sh setup`) é referenciado como caminho relativo, então o jeito mais simples é rodar de dentro de `ansible/`:
+
+```bash
+cd ansible
+ansible-playbook playbook.yml --syntax-check --vault-password-file=.vault_pass
+```
+
+Se preferir rodar a partir da raiz do repo (ex.: `ansible-playbook ansible/playbook.yml`), aponte para o caminho completo do arquivo de senha:
+
+```bash
+ansible-playbook ansible/playbook.yml --syntax-check --vault-password-file=ansible/.vault_pass
+```
+
+Não existe `ansible/.vault_pass`? Rode `./scripts/vault.sh setup` primeiro (veja "Erro: Arquivo de senha do vault não encontrado" no Troubleshooting).
+
 ### Gerenciar Serviços
 
 ```bash
