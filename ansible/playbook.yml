@@ -948,8 +948,33 @@
       loop:
         - /etc/jitsi/jicofo
         - /etc/jitsi/videobridge
-        - /etc/jitsi/meet
         - /var/log/jitsi
+
+    # /etc/jitsi/meet só guarda o config.js público (servido pelo nginx via
+    # SSI no index.html e via fetch direto do navegador, "/config.js?room=").
+    # Diferente de jicofo/videobridge (que guardam credenciais e por isso
+    # ficam 0750 grupo "jitsi"), aqui o grupo é o do nginx — senão o nginx
+    # nem consegue atravessar o diretório para ler o arquivo
+    # ("open() ... failed (13: Permission denied)").
+    - name: Criar diretório de configuração do Jitsi Meet (config.js público)
+      ansible.builtin.file:
+        path: /etc/jitsi/meet
+        state: directory
+        mode: '0750'
+        owner: root
+        group: "{{ nginx_group }}"
+
+    - name: Configurar contexto SELinux para /etc/jitsi/meet (config.js servido pelo nginx)
+      community.general.sefcontext:
+        target: "/etc/jitsi/meet(/.*)?"
+        setype: httpd_sys_content_t
+        state: present
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
+
+    - name: Aplicar contexto SELinux em /etc/jitsi/meet
+      ansible.builtin.command: restorecon -Rv /etc/jitsi/meet
+      changed_when: true
+      when: is_rhel_family and selinux_status.stdout == "Enforcing"
 
     # --- jicofo (extraído do .deb oficial — é "arch: all", jar puro) ---
     - name: Verificar se o jicofo já está instalado
