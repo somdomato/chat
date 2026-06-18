@@ -1,0 +1,19 @@
+[Unit]
+Description=Jitsi Conference Focus
+After=network-online.target prosody.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jicofo
+Group=jitsi
+WorkingDirectory=/usr/share/jicofo
+EnvironmentFile=/etc/jitsi/jicofo/config
+ExecStart=/usr/share/jicofo/jicofo.sh
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=65000
+
+[Install]
+WantedBy=multi-user.target

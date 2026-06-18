@@ -1,0 +1,27 @@
+[Unit]
+Description=Jitsi Videobridge
+After=network-online.target prosody.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+SuccessExitStatus=143
+# erro de configuração não deve gerar loop de restart
+RestartPreventExitStatus=78
+EnvironmentFile=/etc/jitsi/videobridge/config
+Environment=LOGFILE=/var/log/jitsi/jvb.log
+User=jvb
+Group=jitsi
+RuntimeDirectory=jitsi-videobridge
+RuntimeDirectoryMode=0750
+PIDFile=/run/jitsi-videobridge/jitsi-videobridge.pid
+TasksMax=65000
+LimitNPROC=65000
+LimitNOFILE=65000
+ExecStart=/bin/bash -c "exec /usr/share/jitsi-videobridge/jvb.sh ${JVB_OPTS} < /dev/null >> ${LOGFILE} 2>&1"
+ExecStartPost=/bin/bash -c "echo $MAINPID > /run/jitsi-videobridge/jitsi-videobridge.pid"
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

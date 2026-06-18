@@ -6,6 +6,7 @@ domains:
   gamja: "gamja.somdomato.com"
   chat: "chat.somdomato.com"
   lounge: "lounge.somdomato.com"
+  meet: "meet.somdomato.com"
 
 # Email para Let's Encrypt
 letsencrypt_email: "sistematico@gmail.com"
@@ -17,6 +18,19 @@ app_dirs:
   gamja: "/usr/share/gamja"
   webircgateway: "/opt/webircgateway"
   thelounge: "/opt/thelounge"
+  jicofo: "/usr/share/jicofo"
+  jvb: "/usr/share/jitsi-videobridge"
+  jitsimeet: "/usr/share/jitsi-meet"
+
+# Jitsi Meet self-hosted — instalação NATIVA (sem Docker), usada pelo plugin
+# "conference" do KiwiIRC. Todos os componentes (jicofo, jvb, web,
+# prosody-plugins) são extraídos diretamente dos .deb oficiais — são
+# "all"/arquitetura-independente (jar + scripts ou JS/CSS já compilados),
+# então funcionam em qualquer distro/arquitetura com JRE, incluindo Oracle
+# Linux ARM, sem precisar compilar nada na própria VPS. Prosody vem do EPEL.
+jitsi_jicofo_deb_version: "1.0-1183-1"
+jitsi_jvb_deb_version: "2.3-295-g8d5c0037b-1"
+jitsi_meet_web_deb_version: "1.0.9268-1"
 
 # Diretório de backups
 backup_dir: "/var/backups/sdm-chat"

@@ -1,0 +1,128 @@
+-- VirtualHost do Jitsi Meet ({{ domains.meet }}) — gerado pelo Ansible.
+-- Baseado em https://github.com/jitsi/jitsi-meet/blob/master/doc/debian/jitsi-meet-prosody/prosody.cfg.lua-jvb.example
+-- (versão simplificada, sem multidomain/JaaS, sem TURN próprio).
+
+component_admins_as_room_owners = true
+
+plugin_paths = { "{{ app_dirs.jitsimeet }}/prosody-plugins/" }
+
+muc_mapper_domain_base = "{{ domains.meet }}"
+
+cross_domain_bosh = false
+consider_bosh_secure = true
+consider_websocket_secure = true
+
+unlimited_jids = {
+    "focus@auth.{{ domains.meet }}",
+    "jvb@auth.{{ domains.meet }}"
+}
+
+smacks_max_unacked_stanzas = 5
+smacks_hibernation_time = 60
+smacks_max_old_sessions = 1
+
+VirtualHost "{{ domains.meet }}"
+    authentication = "jitsi-anonymous"
+    ssl = {
+        key = "/etc/prosody/certs/{{ domains.meet }}.key";
+        certificate = "/etc/prosody/certs/{{ domains.meet }}.crt";
+    }
+    modules_enabled = {
+        "bosh";
+        "websocket";
+        "smacks";
+        "ping";
+        "external_services";
+        "features_identity";
+        "conference_duration";
+        "muc_lobby_rooms";
+        "muc_breakout_rooms";
+    }
+    c2s_require_encryption = false
+    lobby_muc = "lobby.{{ domains.meet }}"
+    breakout_rooms_muc = "breakout.{{ domains.meet }}"
+    main_muc = "conference.{{ domains.meet }}"
+
+Component "conference.{{ domains.meet }}" "muc"
+    restrict_room_creation = true
+    storage = "memory"
+    modules_enabled = {
+        "muc_hide_all";
+        "muc_meeting_id";
+        "muc_domain_mapper";
+        "muc_rate_limit";
+        "muc_password_whitelist";
+    }
+    admins = { "focus@auth.{{ domains.meet }}" }
+    muc_password_whitelist = {
+        "focus@auth.{{ domains.meet }}"
+    }
+    muc_room_locking = false
+    muc_room_default_public_jids = true
+
+Component "breakout.{{ domains.meet }}" "muc"
+    restrict_room_creation = true
+    storage = "memory"
+    modules_enabled = {
+        "muc_hide_all";
+        "muc_meeting_id";
+        "muc_domain_mapper";
+        "muc_rate_limit";
+        "polls";
+    }
+    admins = { "focus@auth.{{ domains.meet }}" }
+    muc_room_locking = false
+    muc_room_default_public_jids = true
+
+-- internal muc component (usada pelo JvbBrewery)
+Component "internal.auth.{{ domains.meet }}" "muc"
+    storage = "memory"
+    modules_enabled = {
+        "muc_hide_all";
+        "ping";
+    }
+    admins = { "focus@auth.{{ domains.meet }}", "jvb@auth.{{ domains.meet }}" }
+    muc_room_locking = false
+    muc_room_default_public_jids = true
+
+VirtualHost "auth.{{ domains.meet }}"
+    modules_enabled = {
+        "limits_exception";
+        "smacks";
+    }
+    authentication = "internal_hashed"
+    smacks_hibernation_time = 15
+
+VirtualHost "recorder.{{ domains.meet }}"
+    modules_enabled = { "smacks"; }
+    authentication = "internal_hashed"
+    smacks_max_old_sessions = 2000
+
+-- Proxy para o JID do jicofo, evitando que ele precise se registrar como component
+Component "focus.{{ domains.meet }}" "client_proxy"
+    target_address = "focus@auth.{{ domains.meet }}"
+
+Component "speakerstats.{{ domains.meet }}" "speakerstats_component"
+    muc_component = "conference.{{ domains.meet }}"
+
+Component "endconference.{{ domains.meet }}" "end_conference"
+    muc_component = "conference.{{ domains.meet }}"
+
+Component "avmoderation.{{ domains.meet }}" "av_moderation_component"
+    muc_component = "conference.{{ domains.meet }}"
+
+Component "lobby.{{ domains.meet }}" "muc"
+    storage = "memory"
+    restrict_room_creation = true
+    muc_room_locking = false
+    muc_room_default_public_jids = true
+    modules_enabled = {
+        "muc_hide_all";
+        "muc_rate_limit";
+    }
+
+Component "metadata.{{ domains.meet }}" "room_metadata_component"
+    muc_component = "conference.{{ domains.meet }}"
+    breakout_rooms_component = "breakout.{{ domains.meet }}"
+
+Component "polls.{{ domains.meet }}" "polls_component"

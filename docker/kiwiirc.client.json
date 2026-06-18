@@ -14,5 +14,12 @@
         "channel": "#somdomato",
         "nick": "{sdm_?}",
         "showChannel": false
+    },
+    "plugins": [
+        { "name": "conference", "url": "static/plugins/plugin-conference.js" }
+    ],
+    "conference": {
+        "server": "meet.localhost:9083",
+        "secure": false
     }
 }

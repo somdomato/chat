@@ -11,6 +11,19 @@ COPY ansible/usr/share/gamja/ ./
 COPY docker/gamja.config.json ./config.json
 RUN npm run build
 
+# Stage 1b: Build do plugin de conferência (kiwiirc/plugin-conference)
+# Commit fixado para build reprodutível (projeto não publica tags/releases)
+FROM public.ecr.aws/docker/library/node:22-alpine AS conference-builder
+
+RUN apk add --no-cache git
+RUN git clone https://github.com/kiwiirc/plugin-conference.git /conference \
+    && cd /conference \
+    && git checkout d32b1890b21329837c33a33638dcf24372573efa
+
+WORKDIR /conference
+RUN npm install
+RUN npm run build
+
 # Stage 2: Nginx com KiwiIRC + Gamja
 FROM public.ecr.aws/docker/library/nginx:alpine
 
@@ -37,6 +50,9 @@ COPY docker/kiwiirc.client.json /usr/share/kiwiirc/static/config.json
 
 # Gamja build
 COPY --from=gamja-builder /gamja/dist /usr/share/gamja/dist
+
+# Plugin de conferência (Jitsi Meet) do KiwiIRC
+COPY --from=conference-builder /conference/dist/plugin-conference.js /usr/share/kiwiirc/static/plugins/plugin-conference.js
 
 # Configuração do Nginx
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf

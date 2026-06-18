@@ -28,6 +28,7 @@ podman compose -f docker/docker-compose.yml up -d --build
 | `9080` | KiwiIRC – `http://localhost:9080` |
 | `9081` | Gamja – `http://localhost:9081` |
 | `6667` | IRC plaintext (para clientes IRC diretos) |
+| `9083` | Jitsi Meet – `http://localhost:9083` (opcional, ver [seção de conferência](#-conferência-jitsi-meet-self-hosted)) |
 
 ### Via Makefile (monorepo)
 
@@ -1023,6 +1024,85 @@ Restaure esses valores no `ircd.yaml` e recarregue a configuração (`systemctl 
 | `/msg HistServ FORGET #canal` | Apaga histórico armazenado do canal |
 | `/msg HistServ FORGET *` | Apaga histórico de DMs do usuário atual |
 | `/msg HistServ HELP` | Lista todos os comandos disponíveis |
+
+---
+
+## 📹 Conferência (Jitsi Meet self-hosted)
+
+O KiwiIRC roda o plugin oficial [`kiwiirc/plugin-conference`](https://github.com/kiwiirc/plugin-conference),
+que adiciona chamadas de áudio/vídeo direto nos canais e DMs (ícone de telefone
+no header). Por trás dele, em vez do servidor público `meet.jit.si`, rodamos
+nosso próprio Jitsi Meet — **instalação nativa, sem Docker** (a VPS de
+produção é Oracle Linux 10 ARM e não roda Docker). Prosody, Jicofo, JVB e o
+frontend web são instalados/compilados diretamente no host, replicando a
+mesma lógica dos scripts `postinst` dos pacotes Debian oficiais (jicofo e
+jitsi-videobridge são pacotes `arch: all` — apenas jar + scripts — e por isso
+rodam em qualquer distro/arquitetura com JRE, incluindo ARM).
+
+| O quê | Onde |
+|---|---|
+| Build do plugin do KiwiIRC (commit fixado) | Tasks "plugin de conferência" em `ansible/playbook.yml` (prod) / stage `conference-builder` em `docker/Dockerfile.nginx` (dev) |
+| Config do plugin no KiwiIRC | Chaves `plugins` / `conference` em `ansible/etc/kiwiirc/client.json` (prod) e `docker/kiwiirc.client.json` (dev) |
+| Prosody (XMPP) | Pacote `prosody` via EPEL/CRB; vhost gerado de `ansible/etc/prosody/jitsi-meet.cfg.lua.j2` |
+| Jicofo / JVB | Extraídos dos `.deb` oficiais (`download.jitsi.org/stable`) em `/usr/share/jicofo` e `/usr/share/jitsi-videobridge`; units em `ansible/etc/systemd/system/jicofo.service` e `jitsi-videobridge2.service` |
+| Frontend web | Compilado do source de `jitsi/jitsi-meet` (commit fixado) em `/usr/share/jitsi-meet`, igual ao Gamja |
+| Vhost Nginx (prod) | `ansible/etc/nginx/sites.d/16-meet.somdomato.com.conf` — serve os estáticos e faz proxy de `/http-bind` e `/xmpp-websocket` para o Prosody local |
+| Stack opcional para dev local | `docker/jitsi/` (vendorizado do `docker-jitsi-meet`, só para quem quiser testar a feature localmente — não reflete como produção roda) |
+| Domínio | `meet.somdomato.com` |
+
+### Subir o Jitsi localmente (opcional)
+
+Não sobe junto com o `docker compose up -d` padrão do ambiente de dev — é uma
+stack separada (usa Docker só localmente, não em produção), só necessária se
+for testar a feature de chamada:
+
+```bash
+cd docker/jitsi
+cp .env.example .env
+./gen-passwords.sh
+docker compose up -d
+```
+
+Acesse `http://localhost:9083` para confirmar que o Jitsi local subiu antes de
+testar o ícone de chamada no KiwiIRC (`http://localhost:9080`).
+
+### Checklist de produção
+
+Depois de `./scripts/ansible.sh`, faltam passos **manuais** (o playbook não
+gerencia registros DNS, só o desafio DNS-01 do certbot):
+
+1. Criar o registro DNS `meet.somdomato.com` no Cloudflare apontando para o IP da VPS.
+2. Confirmar a porta `10000/udp` (mídia do JVB) liberada no firewall — já incluída
+   na task `firewalld` do playbook, mas confira em provedores com firewall externo
+   (ex.: Security Groups/Network Security Groups da Oracle Cloud) que também
+   precisa ser liberada manualmente lá.
+3. Java (`java-17-openjdk-headless`), Prosody (EPEL+CRB) e o build do frontend
+   (Node ≥24, já instalado pelo playbook para o Gamja) são resolvidos
+   automaticamente — mas por ser uma instalação não-oficialmente-suportada
+   pelo projeto Jitsi fora do Debian/Ubuntu, espere precisar depurar/ajustar
+   no primeiro `./scripts/ansible.sh` real.
+
+Verificação:
+
+```bash
+sudo systemctl status prosody jicofo jitsi-videobridge2 nginx
+curl -I https://meet.somdomato.com
+sudo ss -tlnp | grep 5280              # prosody (BOSH/websocket, só localhost)
+sudo ss -ulnp | grep 10000             # JVB (mídia, público)
+sudo journalctl -u jicofo -u jitsi-videobridge2 -n 50
+```
+
+As senhas internas do Jitsi (XMPP) são geradas uma única vez pelo playbook e
+persistidas em `ansible/.secrets/jitsi/` (fora do vault, nunca versionado —
+veja `.gitignore`).
+
+### Nota de segurança
+
+**Sem autenticação JWT por enquanto.** As salas de conferência são acessíveis
+a qualquer pessoa que souber o nome do canal/DM (mesma ressalva do README
+oficial do plugin) — o servidor é self-hosted, mas não há controle de quem
+entra na chamada. JWT pode ser adicionado depois (exige módulo de auth no
+Prosody + um endpoint para emitir tokens assinados).
 
 ---
 

@@ -425,7 +425,8 @@
           -d {{ domains.irc }} \
           -d {{ domains.chat }} \
           -d {{ domains.gamja }} \
-          -d {{ domains.lounge }}
+          -d {{ domains.lounge }} \
+          -d {{ domains.meet }}
       register: certbot_result
       failed_when: false  # Não falhar automaticamente para poder mostrar o erro
       when: not ssl_cert_exists.stat.exists
@@ -454,6 +455,7 @@
         - "{{ domains.chat }}"
         - "{{ domains.gamja }}"
         - "{{ domains.lounge }}"
+        - "{{ domains.meet }}"
       register: symlink_dest_check
 
     - name: Remover diretórios existentes que impedem criação dos links simbólicos
@@ -485,6 +487,13 @@
       ansible.builtin.file:
         src: "{{ ssl_cert_dir }}/{{ domains.irc }}"
         dest: "{{ ssl_cert_dir }}/{{ domains.lounge }}"
+        state: link
+        force: yes
+
+    - name: Criar links simbólicos dos certificados para meet.somdomato.com
+      ansible.builtin.file:
+        src: "{{ ssl_cert_dir }}/{{ domains.irc }}"
+        dest: "{{ ssl_cert_dir }}/{{ domains.meet }}"
         state: link
         force: yes
 
@@ -629,6 +638,52 @@
         path: /tmp/kiwiirc_download
         state: absent
 
+    # Build do plugin de conferência (Jitsi Meet) do KiwiIRC
+    - name: Clonar plugin de conferência do KiwiIRC (plugin-conference)
+      ansible.builtin.git:
+        repo: https://github.com/kiwiirc/plugin-conference.git
+        dest: /tmp/plugin-conference_build
+        version: d32b1890b21329837c33a33638dcf24372573efa
+        force: true
+      when: refresh_apps
+
+    - name: Instalar dependências do plugin de conferência
+      ansible.builtin.shell: npm install
+      args:
+        chdir: /tmp/plugin-conference_build
+      when: refresh_apps
+      changed_when: true
+
+    - name: Compilar plugin de conferência
+      ansible.builtin.shell: npm run build
+      args:
+        chdir: /tmp/plugin-conference_build
+      when: refresh_apps
+      changed_when: true
+
+    - name: Criar diretório de plugins do KiwiIRC
+      ansible.builtin.file:
+        path: "{{ app_dirs.kiwiirc }}/static/plugins"
+        state: directory
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0755'
+
+    - name: Instalar plugin de conferência compilado
+      ansible.builtin.copy:
+        src: /tmp/plugin-conference_build/dist/plugin-conference.js
+        dest: "{{ app_dirs.kiwiirc }}/static/plugins/plugin-conference.js"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0644'
+        remote_src: true
+      when: refresh_apps
+
+    - name: Limpar build temporário do plugin de conferência
+      ansible.builtin.file:
+        path: /tmp/plugin-conference_build
+        state: absent
+
     # Configuração do WebIRC Gateway
     - name: Verificar se WebIRC Gateway já está instalado
       ansible.builtin.stat:
@@ -725,6 +780,466 @@
         group: "{{ nginx_group }}"
         mode: '0640'
         remote_src: true
+
+    # ===== JITSI MEET SELF-HOSTED (instalação nativa, sem Docker) =====
+    # Usado pelo plugin "conference" do KiwiIRC (https://github.com/kiwiirc/plugin-conference).
+    # Sem Docker nesta VPS. jicofo e jitsi-videobridge são extraídos
+    # diretamente dos .deb oficiais (são arch "all" — jar + scripts Java/bash,
+    # portanto rodam em qualquer distro/arquitetura com JRE, incluindo Oracle
+    # Linux ARM). Prosody vem do EPEL. O frontend web é compilado a partir do
+    # código-fonte de kiwiirc, igual ao Gamja. A lógica replica o que os
+    # scripts postinst dos pacotes Debian fazem (ver debian/postinst dos repos
+    # jitsi/jicofo, jitsi/jitsi-videobridge e jitsi/jitsi-meet no GitHub).
+
+    - name: Instalar Java (RHEL/Oracle Linux)
+      ansible.builtin.package:
+        # Oracle Linux 10 só empacota o java-21-openjdk (não há java-17 no AppStream do EL10)
+        name: "{{ 'java-21-openjdk-headless' if ansible_facts['distribution_major_version'] == '10' else 'java-17-openjdk-headless' }}"
+        state: present
+      when: is_rhel_family
+
+    - name: Instalar Java (Debian/Ubuntu)
+      ansible.builtin.package:
+        name: openjdk-17-jre-headless
+        state: present
+      when: is_debian_family
+
+    - name: Instalar binutils (necessário para extrair os .deb com ar)
+      ansible.builtin.package:
+        name: binutils
+        state: present
+
+    - name: Instalar EPEL (Oracle Linux / RHEL / Rocky)
+      ansible.builtin.shell: |
+        dnf install -y oracle-epel-release-el{{ ansible_facts['distribution_major_version'] }} 2>/dev/null \
+          || dnf install -y epel-release
+        dnf config-manager --set-enabled crb 2>/dev/null \
+          || dnf config-manager --set-enabled powertools 2>/dev/null \
+          || /usr/bin/crb enable 2>/dev/null || true
+      args:
+        creates: /etc/yum.repos.d/epel.repo
+      when: is_rhel_family
+      changed_when: true
+
+    - name: Instalar Prosody (Oracle Linux / RHEL / Rocky, via EPEL)
+      ansible.builtin.package:
+        name: prosody
+        state: present
+      when: is_rhel_family
+
+    # O EPEL também empacota nginx, com versão diferente da do
+    # AppStream/ol_addons. Se o nginx core e o nginx-mod-http-geoip2 (que
+    # precisam ter a MESMA versão/ABI) vierem de repositórios diferentes,
+    # o nginx para de iniciar ("module ... version X instead of Y"). Aqui
+    # forçamos os dois a vir do mesmo conjunto de repositórios não-EPEL,
+    # desfazendo qualquer dessincronia que a ativação do EPEL tenha causado.
+    - name: Corrigir possível dessincronia de versão entre nginx e seus módulos
+      ansible.builtin.shell: >
+        dnf distro-sync -y --disablerepo='*[Ee][Pp][Ee][Ll]*' nginx 'nginx-mod-*'
+      register: nginx_distro_sync
+      changed_when: "'Nothing to do' not in nginx_distro_sync.stdout"
+      when: is_rhel_family
+
+    - name: Instalar Prosody (Debian/Ubuntu)
+      ansible.builtin.package:
+        name: prosody
+        state: present
+      when: is_debian_family
+
+    - name: "Garante que o grupo exista: jitsi"
+      ansible.builtin.group:
+        name: jitsi
+        state: present
+
+    - name: Criar usuário de sistema do jicofo
+      ansible.builtin.user:
+        name: jicofo
+        group: jitsi
+        create_home: true
+        home: "{{ app_dirs.jicofo }}"
+        shell: /bin/bash
+        system: true
+
+    - name: Criar usuário de sistema do jvb
+      ansible.builtin.user:
+        name: jvb
+        group: jitsi
+        create_home: true
+        home: "{{ app_dirs.jvb }}"
+        shell: /bin/bash
+        system: true
+
+    - name: Criar diretórios de configuração e log do Jitsi
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0750'
+        owner: "{{ 'jicofo' if 'jicofo' in item else ('jvb' if 'videobridge' in item else 'root') }}"
+        group: jitsi
+      loop:
+        - /etc/jitsi/jicofo
+        - /etc/jitsi/videobridge
+        - /etc/jitsi/meet
+        - /var/log/jitsi
+
+    # --- jicofo (extraído do .deb oficial — é "arch: all", jar puro) ---
+    - name: Verificar se o jicofo já está instalado
+      ansible.builtin.stat:
+        path: "{{ app_dirs.jicofo }}/jicofo.jar"
+      register: jicofo_installed
+
+    - name: Baixar .deb do jicofo
+      ansible.builtin.get_url:
+        url: "https://download.jitsi.org/stable/jicofo_{{ jitsi_jicofo_deb_version }}_all.deb"
+        dest: /tmp/jicofo.deb
+        mode: '0644'
+      when: refresh_apps or not jicofo_installed.stat.exists
+
+    - name: Extrair .deb do jicofo
+      ansible.builtin.shell: |
+        rm -rf /tmp/jicofo_extract && mkdir -p /tmp/jicofo_extract
+        cd /tmp/jicofo_extract
+        ar x /tmp/jicofo.deb
+        tar -xf data.tar.*
+      when: refresh_apps or not jicofo_installed.stat.exists
+      changed_when: true
+
+    - name: Instalar arquivos do jicofo
+      ansible.posix.synchronize:
+        src: "/tmp/jicofo_extract/usr/share/jicofo/"
+        dest: "{{ app_dirs.jicofo }}/"
+        delete: false
+        recursive: true
+      delegate_to: "{{ inventory_hostname }}"
+      when: refresh_apps or not jicofo_installed.stat.exists
+
+    - name: Instalar logging.properties do jicofo (se ainda não existir)
+      ansible.builtin.copy:
+        src: /tmp/jicofo_extract/etc/jitsi/jicofo/logging.properties
+        dest: /etc/jitsi/jicofo/logging.properties
+        remote_src: true
+        owner: jicofo
+        group: jitsi
+        mode: '0640'
+        force: false
+
+    - name: Ajustar propriedade dos arquivos do jicofo
+      ansible.builtin.file:
+        path: "{{ app_dirs.jicofo }}"
+        owner: jicofo
+        group: jitsi
+        recurse: true
+
+    # --- jitsi-videobridge (jvb) — mesma lógica, .deb "arch: all" ---
+    - name: Verificar se o jvb já está instalado
+      ansible.builtin.stat:
+        path: "{{ app_dirs.jvb }}/jitsi-videobridge.jar"
+      register: jvb_installed
+
+    - name: Baixar .deb do jitsi-videobridge2
+      ansible.builtin.get_url:
+        url: "https://download.jitsi.org/stable/jitsi-videobridge2_{{ jitsi_jvb_deb_version }}_all.deb"
+        dest: /tmp/jvb.deb
+        mode: '0644'
+      when: refresh_apps or not jvb_installed.stat.exists
+
+    - name: Extrair .deb do jvb
+      ansible.builtin.shell: |
+        rm -rf /tmp/jvb_extract && mkdir -p /tmp/jvb_extract
+        cd /tmp/jvb_extract
+        ar x /tmp/jvb.deb
+        tar -xf data.tar.*
+      when: refresh_apps or not jvb_installed.stat.exists
+      changed_when: true
+
+    - name: Instalar arquivos do jvb
+      ansible.posix.synchronize:
+        src: "/tmp/jvb_extract/usr/share/jitsi-videobridge/"
+        dest: "{{ app_dirs.jvb }}/"
+        delete: false
+        recursive: true
+      delegate_to: "{{ inventory_hostname }}"
+      when: refresh_apps or not jvb_installed.stat.exists
+
+    - name: Instalar logging.properties do jvb (se ainda não existir)
+      ansible.builtin.copy:
+        src: /tmp/jvb_extract/etc/jitsi/videobridge/logging.properties
+        dest: /etc/jitsi/videobridge/logging.properties
+        remote_src: true
+        owner: jvb
+        group: jitsi
+        mode: '0640'
+        force: false
+
+    - name: Ajustar propriedade dos arquivos do jvb
+      ansible.builtin.file:
+        path: "{{ app_dirs.jvb }}"
+        owner: jvb
+        group: jitsi
+        recurse: true
+
+    - name: Limpar downloads/extrações temporárias do jicofo/jvb
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/jicofo.deb
+        - /tmp/jicofo_extract
+        - /tmp/jvb.deb
+        - /tmp/jvb_extract
+
+    # Senhas internas do Jitsi (XMPP), geradas uma única vez e persistidas
+    # localmente (fora do vault, que é criptografado manualmente) — ver
+    # .gitignore: ansible/.secrets/ nunca é versionado.
+    - name: Gerar/recuperar senhas internas do Jitsi
+      ansible.builtin.set_fact:
+        jitsi_jicofo_auth_password: "{{ lookup('password', playbook_dir + '/.secrets/jitsi/jicofo_auth_password length=32 chars=ascii_letters,digits') }}"
+        jitsi_jvb_auth_password: "{{ lookup('password', playbook_dir + '/.secrets/jitsi/jvb_auth_password length=32 chars=ascii_letters,digits') }}"
+      no_log: true
+
+    - name: Gerar jicofo.conf (HOCON)
+      ansible.builtin.copy:
+        dest: /etc/jitsi/jicofo/jicofo.conf
+        owner: jicofo
+        group: jitsi
+        mode: '0640'
+        content: |
+          jicofo {
+            xmpp {
+              client {
+                client-proxy = "focus.{{ domains.meet }}"
+                xmpp-domain = "{{ domains.meet }}"
+                domain = "auth.{{ domains.meet }}"
+                username = "focus"
+                password = "{{ jitsi_jicofo_auth_password }}"
+              }
+              trusted-domains = [ "recorder.{{ domains.meet }}" ]
+            }
+            bridge {
+              brewery-jid = "JvbBrewery@internal.auth.{{ domains.meet }}"
+            }
+          }
+      no_log: true
+      notify: Reiniciar serviços jitsi
+
+    - name: Gerar jvb.conf (HOCON)
+      ansible.builtin.copy:
+        dest: /etc/jitsi/videobridge/jvb.conf
+        owner: jvb
+        group: jitsi
+        mode: '0640'
+        content: |
+          videobridge {
+            apis.xmpp-client.configs {
+              shard {
+                HOSTNAME = "localhost"
+                DOMAIN = "auth.{{ domains.meet }}"
+                USERNAME = "jvb"
+                PASSWORD = "{{ jitsi_jvb_auth_password }}"
+                MUC_JIDS = "JvbBrewery@internal.auth.{{ domains.meet }}"
+                MUC_NICKNAME = "{{ ansible_facts['hostname'] }}"
+              }
+            }
+          }
+          ice4j {
+            harvest.mapping.stun.addresses = [ "meet-jit-si-turnrelay.jitsi.net:443" ]
+          }
+      no_log: true
+      notify: Reiniciar serviços jitsi
+
+    - name: Gerar arquivo de ambiente do jicofo (systemd EnvironmentFile)
+      ansible.builtin.copy:
+        dest: /etc/jitsi/jicofo/config
+        owner: jicofo
+        group: jitsi
+        mode: '0640'
+        content: |
+          JAVA_SYS_PROPS="-Dnet.java.sip.communicator.SC_HOME_DIR_LOCATION=/etc/jitsi -Dnet.java.sip.communicator.SC_HOME_DIR_NAME=jicofo -Dnet.java.sip.communicator.SC_LOG_DIR_LOCATION=/var/log/jitsi -Djava.util.logging.config.file=/etc/jitsi/jicofo/logging.properties -Dconfig.file=/etc/jitsi/jicofo/jicofo.conf"
+      notify: Reiniciar serviços jitsi
+
+    - name: Gerar arquivo de ambiente do jvb (systemd EnvironmentFile)
+      ansible.builtin.copy:
+        dest: /etc/jitsi/videobridge/config
+        owner: jvb
+        group: jitsi
+        mode: '0640'
+        content: |
+          JAVA_SYS_PROPS="-Dnet.java.sip.communicator.SC_HOME_DIR_LOCATION=/etc/jitsi -Dnet.java.sip.communicator.SC_HOME_DIR_NAME=videobridge -Dnet.java.sip.communicator.SC_LOG_DIR_LOCATION=/var/log/jitsi -Djava.util.logging.config.file=/etc/jitsi/videobridge/logging.properties -Dconfig.file=/etc/jitsi/videobridge/jvb.conf"
+
+      notify: Reiniciar serviços jitsi
+
+    # --- Prosody (XMPP) ---
+    - name: Garantir que o prosody.cfg.lua principal inclua conf.d/*.cfg.lua
+      ansible.builtin.lineinfile:
+        path: /etc/prosody/prosody.cfg.lua
+        line: 'Include "conf.d/*.cfg.lua"'
+        insertafter: EOF
+      register: prosody_main_config
+
+    - name: Copiar certificado fullchain para o Prosody
+      ansible.builtin.copy:
+        src: "{{ ssl_cert_dir }}/{{ domains.irc }}/fullchain.pem"
+        dest: "/etc/prosody/certs/{{ domains.meet }}.crt"
+        owner: prosody
+        group: prosody
+        mode: '0640'
+        remote_src: true
+
+    - name: Copiar chave privada para o Prosody
+      ansible.builtin.copy:
+        src: "{{ ssl_cert_dir }}/{{ domains.irc }}/privkey.pem"
+        dest: "/etc/prosody/certs/{{ domains.meet }}.key"
+        owner: prosody
+        group: prosody
+        mode: '0640'
+        remote_src: true
+
+    - name: Gerar config do VirtualHost do Prosody para o Jitsi Meet
+      ansible.builtin.template:
+        src: etc/prosody/jitsi-meet.cfg.lua.j2
+        dest: "/etc/prosody/conf.d/{{ domains.meet }}.cfg.lua"
+        owner: prosody
+        group: prosody
+        mode: '0640'
+      register: prosody_jitsi_config
+      no_log: true
+
+    - name: Garantir que o Prosody esteja habilitado e iniciado
+      ansible.builtin.systemd:
+        name: prosody
+        enabled: true
+        state: started
+
+    - name: Reiniciar o Prosody se alguma config mudou (main config ou VirtualHost do Jitsi)
+      ansible.builtin.systemd:
+        name: prosody
+        state: restarted
+      when: prosody_main_config.changed or prosody_jitsi_config.changed
+
+    - name: Aguardar o Prosody carregar o VirtualHost do Jitsi Meet
+      ansible.builtin.pause:
+        seconds: 5
+      when: prosody_main_config.changed or prosody_jitsi_config.changed
+
+    - name: Criar/atualizar usuário XMPP do jicofo (focus) no Prosody
+      ansible.builtin.command:
+        argv:
+          - prosodyctl
+          - register
+          - focus
+          - "auth.{{ domains.meet }}"
+          - "{{ jitsi_jicofo_auth_password }}"
+      register: jicofo_prosody_user
+      failed_when: jicofo_prosody_user.rc != 0
+      changed_when: jicofo_prosody_user.rc == 0
+      no_log: true
+
+    - name: Criar/atualizar usuário XMPP do jvb no Prosody
+      ansible.builtin.command:
+        argv:
+          - prosodyctl
+          - register
+          - jvb
+          - "auth.{{ domains.meet }}"
+          - "{{ jitsi_jvb_auth_password }}"
+      register: jvb_prosody_user
+      failed_when: jvb_prosody_user.rc != 0
+      changed_when: jvb_prosody_user.rc == 0
+      no_log: true
+
+    # --- Frontend web + prosody-plugins ---
+    # Extraídos dos .deb oficiais já compilados (jitsi-meet-web, jitsi-meet-prosody).
+    # Evita compilar o webpack do jitsi-meet na própria VPS: é um build pesado
+    # (recomendado ~8GB de heap) que travava/ficava horas numa VPS ARM pequena.
+    - name: Verificar se o frontend do jitsi-meet já está instalado
+      ansible.builtin.stat:
+        path: "{{ app_dirs.jitsimeet }}/libs"
+      register: jitsimeet_installed
+
+    - name: Baixar .deb do jitsi-meet-web
+      ansible.builtin.get_url:
+        url: "https://download.jitsi.org/stable/jitsi-meet-web_{{ jitsi_meet_web_deb_version }}_all.deb"
+        dest: /tmp/jitsi-meet-web.deb
+        mode: '0644'
+      when: refresh_apps or not jitsimeet_installed.stat.exists
+
+    - name: Baixar .deb do jitsi-meet-prosody (contém os prosody-plugins)
+      ansible.builtin.get_url:
+        url: "https://download.jitsi.org/stable/jitsi-meet-prosody_{{ jitsi_meet_web_deb_version }}_all.deb"
+        dest: /tmp/jitsi-meet-prosody.deb
+        mode: '0644'
+      when: refresh_apps or not jitsimeet_installed.stat.exists
+
+    - name: Extrair .deb do jitsi-meet-web e jitsi-meet-prosody
+      ansible.builtin.shell: |
+        rm -rf /tmp/jitsimeet_extract && mkdir -p /tmp/jitsimeet_extract
+        cd /tmp/jitsimeet_extract
+        for deb in /tmp/jitsi-meet-web.deb /tmp/jitsi-meet-prosody.deb; do
+          mkdir -p "$(basename $deb .deb)"
+          (cd "$(basename $deb .deb)" && ar x "$deb" && tar -xf data.tar.*)
+        done
+      when: refresh_apps or not jitsimeet_installed.stat.exists
+      changed_when: true
+
+    - name: Criar diretório do frontend do Jitsi Meet
+      ansible.builtin.file:
+        path: "{{ app_dirs.jitsimeet }}"
+        state: directory
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        mode: '0755'
+
+    - name: Instalar arquivos do frontend web (jitsi-meet-web)
+      ansible.posix.synchronize:
+        src: "/tmp/jitsimeet_extract/jitsi-meet-web/usr/share/jitsi-meet/"
+        dest: "{{ app_dirs.jitsimeet }}/"
+        delete: false
+        recursive: true
+      delegate_to: "{{ inventory_hostname }}"
+      when: refresh_apps or not jitsimeet_installed.stat.exists
+
+    - name: Instalar prosody-plugins (jitsi-meet-prosody)
+      ansible.posix.synchronize:
+        src: "/tmp/jitsimeet_extract/jitsi-meet-prosody/usr/share/jitsi-meet/prosody-plugins/"
+        dest: "{{ app_dirs.jitsimeet }}/prosody-plugins/"
+        delete: false
+        recursive: true
+      delegate_to: "{{ inventory_hostname }}"
+      when: refresh_apps or not jitsimeet_installed.stat.exists
+
+    - name: Ajustar propriedade dos arquivos do jitsi-meet
+      ansible.builtin.file:
+        path: "{{ app_dirs.jitsimeet }}"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_group }}"
+        recurse: true
+
+    - name: Limpar downloads/extrações temporárias do jitsi-meet
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/jitsi-meet-web.deb
+        - /tmp/jitsi-meet-prosody.deb
+        - /tmp/jitsimeet_extract
+
+    - name: Gerar config.js do Jitsi Meet
+      ansible.builtin.copy:
+        dest: "/etc/jitsi/meet/{{ domains.meet }}-config.js"
+        owner: root
+        group: "{{ nginx_group }}"
+        mode: '0644'
+        content: |
+          var config = {
+              hosts: {
+                  domain: '{{ domains.meet }}',
+                  muc: 'conference.{{ domains.meet }}',
+              },
+              bosh: '//{{ domains.meet }}/http-bind',
+              websocket: 'wss://{{ domains.meet }}/xmpp-websocket',
+              clientNode: 'https://jitsi.org/jitsi-meet',
+          };
+        force: false
 
     # ===== SOJU =====
     - name: Criar diretório de configuração do soju
@@ -962,6 +1477,7 @@
         - "13-{{ domains.gamja }}.conf"
         - "14-{{ domains.chat }}.conf"
         - "15-{{ domains.lounge }}.conf"
+        - "16-{{ domains.meet }}.conf"
       notify: Reiniciar Nginx
 
     - name: Aplicar reinício do Nginx imediatamente se config mudou
@@ -981,6 +1497,8 @@
         - "somdomato-webircgateway.service"
         - "somdomato-thelounge.service"
         - "somdomato-soju.service"
+        - "jicofo.service"
+        - "jitsi-videobridge2.service"
 
     - name: Abrir portas no firewall (Oracle Linux / RHEL)
       ansible.posix.firewalld:
@@ -994,6 +1512,7 @@
         - "6697/tcp"
         - "6698/tcp"
         - "8067/tcp"
+        - "10000/udp"
       when: is_rhel_family
 
     - name: Habilitar e iniciar serviços
@@ -1007,6 +1526,8 @@
         - "somdomato-webircgateway.service"
         - "somdomato-thelounge.service"
         - "somdomato-soju.service"
+        - "jicofo.service"
+        - "jitsi-videobridge2.service"
         - nginx
 
     - name: Aguardar socket admin do soju estar disponível
@@ -1044,6 +1565,15 @@
         - "somdomato-webircgateway.service"
         - "somdomato-thelounge.service"
         - "somdomato-soju.service"
+
+    - name: Reiniciar serviços jitsi
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        daemon_reload: true
+        state: restarted
+      loop:
+        - "jicofo.service"
+        - "jitsi-videobridge2.service"
         # - "somdomato-kiwiirc.service"  # Apenas se necessário
 
     - name: Testar configuração do Nginx
