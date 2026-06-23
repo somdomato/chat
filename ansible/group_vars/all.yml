@@ -35,6 +35,9 @@ jitsi_meet_web_deb_version: "1.0.9268-1"
 # Diretório de backups
 backup_dir: "/var/backups/sdm-chat"
 
+# Backup dos arquivos de unit systemd do SDM (desabilitado por padrão)
+backup_systemd_services: false
+
 # Usuários e grupos
 ergo_user: "ergo"
 ergo_group: "ergo"
