@@ -461,6 +461,8 @@
     - name: Obter certificados SSL para todos os domínios
       ansible.builtin.shell: |
         certbot certonly \
+          --cert-name {{ domains.irc }} \
+          --expand \
           --dns-cloudflare \
           --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
           --dns-cloudflare-propagation-seconds 60 \
@@ -477,7 +479,6 @@
       register: certbot_result
       failed_when: false # Não falhar automaticamente para poder mostrar o erro
       when: not ssl_cert_exists.stat.exists or ssl_cert_covers_domains.rc != 0
-      #when: not ssl_cert_exists.stat.exists
 
     - name: Mostrar resultado detalhado do certbot
       ansible.builtin.debug:
@@ -577,7 +578,11 @@
         group: root
         mode: "0755"
 
-    - name: Sincronizar arquivos de aplicação
+    # Conteúdo nosso (overlay versionado no repo, não o app de terceiros) —
+    # rápido e idempotente por natureza (rsync só copia o que mudou), então
+    # roda sempre. O download/build dos apps de terceiros abaixo é que é
+    # caro e fica atrás de "refresh_apps" + verificação de já-instalado.
+    - name: Sincronizar arquivos de aplicação (overlay próprio)
       ansible.posix.synchronize:
         src: "usr/share/{{ item }}/"
         dest: "{{ app_dirs[item] }}/"
@@ -591,7 +596,11 @@
       loop:
         - gamja
         - kiwiirc
-      when: refresh_apps
+
+    - name: Verificar se o Ergo já está instalado
+      ansible.builtin.stat:
+        path: "{{ app_dirs.ergo }}/ergo"
+      register: ergo_installed
 
     - name: Determinar arquitetura para download do Ergo
       ansible.builtin.set_fact:
@@ -602,7 +611,7 @@
         src: "https://github.com/ergochat/ergo/releases/download/v{{ ergo_version }}/ergo-{{ ergo_version }}-linux-{{ ergo_arch }}.tar.gz"
         dest: /tmp
         remote_src: true
-      when: refresh_apps
+      when: refresh_apps or not ergo_installed.stat.exists
 
     - name: Criar diretório do Ergo
       ansible.builtin.file:
@@ -620,7 +629,7 @@
         group: "{{ ergo_group }}"
         mode: "0755"
         remote_src: true
-      when: refresh_apps
+      when: refresh_apps or not ergo_installed.stat.exists
 
     - name: Copiar arquivos de configuração do Ergo
       ansible.posix.synchronize:
@@ -632,7 +641,6 @@
           - "--no-motd"
           - "--exclude=ergo"
           - "-e 'ssh -p {{ ansible_port }}'"
-      when: refresh_apps
 
     - name: Limpar download temporário do Ergo
       ansible.builtin.file:
@@ -640,18 +648,24 @@
         state: absent
 
     # Baixar e instalar KiwiIRC do GitHub
+    - name: Verificar se o KiwiIRC já está instalado
+      ansible.builtin.stat:
+        path: "{{ app_dirs.kiwiirc }}/index.html"
+      register: kiwiirc_installed
+
     - name: Criar diretório temporário para download do KiwiIRC
       ansible.builtin.file:
         path: /tmp/kiwiirc_download
         state: directory
         mode: "0755"
+      when: refresh_apps or not kiwiirc_installed.stat.exists
 
     - name: Baixar KiwiIRC v1.7.1 do GitHub
       ansible.builtin.get_url:
         url: https://github.com/kiwiirc/kiwiirc/releases/download/v1.7.1/kiwiirc-client_v1.7.1-2_any.zip
         dest: /tmp/kiwiirc_download/kiwiirc.zip
         mode: "0644"
-      when: refresh_apps
+      when: refresh_apps or not kiwiirc_installed.stat.exists
 
     - name: Criar diretório do KiwiIRC
       ansible.builtin.file:
@@ -668,8 +682,9 @@
         remote_src: yes
         owner: "{{ nginx_user }}"
         group: "{{ nginx_group }}"
-      when: refresh_apps
+      when: refresh_apps or not kiwiirc_installed.stat.exists
 
+    # Overlay nosso (temas) — rápido e idempotente, sempre roda.
     - name: Sincronizar temas personalizados do KiwiIRC
       ansible.posix.synchronize:
         src: "usr/share/kiwiirc/static/"
@@ -679,21 +694,27 @@
         rsync_opts:
           - "--no-motd"
           - "-e 'ssh -p {{ ansible_port }}'"
-      when: refresh_apps
 
     - name: Limpar arquivos temporários do KiwiIRC
       ansible.builtin.file:
         path: /tmp/kiwiirc_download
         state: absent
 
-    # Build do plugin de conferência (Jitsi Meet) do KiwiIRC
+    # Build do plugin de conferência (Jitsi Meet) do KiwiIRC — clone + npm
+    # install + webpack build é a etapa mais lenta do playbook inteiro, então
+    # só roda de novo se refresh_apps=true ou o .js compilado ainda não existir.
+    - name: Verificar se o plugin de conferência já está instalado
+      ansible.builtin.stat:
+        path: "{{ app_dirs.kiwiirc }}/static/plugins/plugin-conference.js"
+      register: plugin_conference_installed
+
     - name: Clonar plugin de conferência do KiwiIRC (plugin-conference)
       ansible.builtin.git:
         repo: https://github.com/kiwiirc/plugin-conference.git
         dest: /tmp/plugin-conference_build
         version: d32b1890b21329837c33a33638dcf24372573efa
         force: true
-      when: refresh_apps
+      when: refresh_apps or not plugin_conference_installed.stat.exists
 
     # Bug do plugin-conference: passa config.setting('configOverwrite') e
     # config.setting('interfaceConfigOverwrite') direto pro JitsiMeetExternalAPI.
@@ -704,6 +725,17 @@
     # Jitsi nunca termina de inicializar e a tela fica em branco. O patch
     # clona os objetos (JSON.parse/stringify) antes de passá-los, removendo
     # a reatividade do Vue.
+    #
+    # Segundo bug, mais grave: "this.api = new window.JitsiMeetExternalAPI(...)"
+    # é atribuído a uma propriedade reativa do Vue (data() retorna api:null).
+    # O Vue 3 torna esse objeto reativo recursivamente — e como o
+    # JitsiMeetExternalAPI guarda uma referência ao Window do iframe
+    # (cross-origin), toda vez que o Vue tenta rastrear esse objeto (a cada
+    # mensagem que o iframe manda via postMessage, ex.: nível de áudio,
+    # dezenas/segundo) o Firefox bloqueia o acesso a "__v_isRef" nesse objeto
+    # cross-origin — gerando milhares de exceções e nunca disparando
+    # "videoConferenceJoined" (loading infinito). O patch usa kiwi.Vue.markRaw
+    # (exposto pelo próprio KiwiIRC) pra impedir o Vue de observar a instância.
     - name: "Patch: remover reatividade do Vue antes de passar config para o JitsiMeetExternalAPI"
       ansible.builtin.replace:
         path: /tmp/plugin-conference_build/src/components/JitsiMediaView.vue
@@ -714,22 +746,24 @@
           replace: "let configOverwrite = JSON.parse(JSON.stringify(config.setting('configOverwrite')));"
         - regexp: "interfaceConfigOverwrite: config\\.setting\\('interfaceConfigOverwrite'\\),"
           replace: "interfaceConfigOverwrite: JSON.parse(JSON.stringify(config.setting('interfaceConfigOverwrite'))),"
+        - regexp: "this\\.api = new window\\.JitsiMeetExternalAPI\\(domain, options\\);"
+          replace: "this.api = (kiwi.Vue && kiwi.Vue.markRaw ? kiwi.Vue.markRaw : (v) => v)(new window.JitsiMeetExternalAPI(domain, options));"
       loop_control:
         label: "{{ item.regexp }}"
-      when: refresh_apps
+      when: refresh_apps or not plugin_conference_installed.stat.exists
 
     - name: Instalar dependências do plugin de conferência
       ansible.builtin.shell: npm install
       args:
         chdir: /tmp/plugin-conference_build
-      when: refresh_apps
+      when: refresh_apps or not plugin_conference_installed.stat.exists
       changed_when: true
 
     - name: Compilar plugin de conferência
       ansible.builtin.shell: npm run build
       args:
         chdir: /tmp/plugin-conference_build
-      when: refresh_apps
+      when: refresh_apps or not plugin_conference_installed.stat.exists
       changed_when: true
 
     - name: Criar diretório de plugins do KiwiIRC
@@ -748,7 +782,7 @@
         group: "{{ nginx_group }}"
         mode: "0644"
         remote_src: true
-      when: refresh_apps
+      when: refresh_apps or not plugin_conference_installed.stat.exists
 
     - name: Limpar build temporário do plugin de conferência
       ansible.builtin.file:
@@ -977,6 +1011,27 @@
         - /etc/jitsi/videobridge
         - /var/log/jitsi
 
+    # jvb.sh só faz "echo >> jvb.log", sem nenhuma rotação própria — sem
+    # logrotate o arquivo cresce sem limite (já vimos 8GB+ num loop de
+    # reconexão TLS). copytruncate evita ter que sinalizar o processo.
+    - name: Configurar logrotate para os logs do Jitsi
+      ansible.builtin.copy:
+        dest: /etc/logrotate.d/jitsi
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          /var/log/jitsi/*.log {
+              daily
+              rotate 7
+              missingok
+              notifempty
+              compress
+              delaycompress
+              copytruncate
+              maxsize 200M
+          }
+
     # /etc/jitsi/meet só guarda o config.js público (servido pelo nginx via
     # SSI no index.html e via fetch direto do navegador, "/config.js?room=").
     # Diferente de jicofo/videobridge (que guardam credenciais e por isso
@@ -1043,6 +1098,7 @@
         group: jitsi
         mode: "0640"
         force: false
+      when: refresh_apps or not jicofo_installed.stat.exists
 
     - name: Ajustar propriedade dos arquivos do jicofo
       ansible.builtin.file:
@@ -1091,6 +1147,7 @@
         group: jitsi
         mode: "0640"
         force: false
+      when: refresh_apps or not jvb_installed.stat.exists
 
     - name: Ajustar propriedade dos arquivos do jvb
       ansible.builtin.file:
@@ -1133,6 +1190,9 @@
                 domain = "auth.{{ domains.meet }}"
                 username = "focus"
                 password = "{{ jitsi_jicofo_auth_password }}"
+                # auth.{{ domains.meet }} é um vhost XMPP interno (não público);
+                # o certificado TLS é o do domínio principal e nunca terá esse SAN.
+                disable-certificate-verification = true
               }
               trusted-domains = [ "recorder.{{ domains.meet }}" ]
             }
@@ -1159,6 +1219,9 @@
                 PASSWORD = "{{ jitsi_jvb_auth_password }}"
                 MUC_JIDS = "JvbBrewery@internal.auth.{{ domains.meet }}"
                 MUC_NICKNAME = "{{ ansible_facts['hostname'] }}"
+                # auth.{{ domains.meet }} é um vhost XMPP interno (não público);
+                # o certificado TLS é o do domínio principal e nunca terá esse SAN.
+                DISABLE_CERTIFICATE_VERIFICATION = true
               }
             }
           }
@@ -1335,6 +1398,57 @@
         group: "{{ nginx_group }}"
         recurse: true
 
+    # O Component "focus.{{ domains.meet }}" "client_proxy" (ver
+    # etc/prosody/jitsi-meet.cfg.lua.j2) só consegue rotear o IQ de "criar
+    # conferência" pro jicofo se existir uma assinatura de roster (presence
+    # subscription) prévia entre o componente e o usuário focus@auth.{{
+    # domains.meet }}. mod_client_proxy.lua manda essa assinatura sozinho,
+    # mas só UMA VEZ, no boot do Prosody — se o jicofo ainda não tiver
+    # autenticado naquele instante (ele é mais lento pra subir que o
+    # Prosody), a assinatura se perde e fica perdida pra sempre, porque sem
+    # registro no roster o Prosody não tem nada pra reenviar depois. O
+    # sintoma final no navegador: a webcam fica em "loading" infinito e o
+    # console mostra "Strophe error ... reason: service-unavailable ...
+    # operation: conference request (IQ) ... targetJid: focus.{{ domains.meet
+    # }}" — o IQ nunca chega no jicofo (ver jicofo.log: nenhuma entrada).
+    # mod_roster_command.lua (extraído junto dos outros prosody-plugins,
+    # acima) resolve isso definitivamente gravando a assinatura direto no
+    # roster armazenado em disco — não depende mais de timing de boot.
+    # Comentário do próprio autor do módulo confirma esse uso:
+    # "Used by Ansible to subscribe focus.<domain> to focus@auth.<domain>".
+    #
+    # Só precisa rodar uma vez (a assinatura fica persistida em disco pelo
+    # Prosody) — um marker file evita reexecutar o comando e reiniciar os
+    # serviços jitsi a cada "ansible-playbook" (ver feedback sobre o
+    # playbook repetir tarefas desnecessárias).
+    - name: Verificar se a assinatura de roster do client_proxy já foi feita
+      ansible.builtin.stat:
+        path: /etc/jitsi/.client_proxy_roster_subscribed
+      register: jitsi_roster_subscribed
+
+    - name: Assinar roster do client_proxy -> focus (necessário pro jicofo criar conferências)
+      ansible.builtin.command:
+        argv:
+          - prosodyctl
+          - mod_roster_command
+          - subscribe
+          - "focus.{{ domains.meet }}"
+          - "focus@auth.{{ domains.meet }}"
+      register: jitsi_roster_subscribe
+      changed_when: true
+      failed_when: jitsi_roster_subscribe.rc != 0
+      when: not jitsi_roster_subscribed.stat.exists
+      notify: Reiniciar serviços jitsi
+
+    - name: Marcar assinatura de roster do client_proxy como feita
+      ansible.builtin.file:
+        path: /etc/jitsi/.client_proxy_roster_subscribed
+        state: touch
+        owner: root
+        group: jitsi
+        mode: "0640"
+      when: not jitsi_roster_subscribed.stat.exists
+
     - name: Limpar downloads/extrações temporárias do jitsi-meet
       ansible.builtin.file:
         path: "{{ item }}"
@@ -1427,6 +1541,11 @@
         group: "{{ nginx_group }}"
         mode: "0755"
 
+    - name: Verificar se o build do Gamja já existe
+      ansible.builtin.stat:
+        path: "{{ app_dirs.gamja }}/dist/index.html"
+      register: gamja_built
+
     - name: Executar npm install no Gamja
       ansible.builtin.shell: |
         cd "{{ app_dirs.gamja }}"
@@ -1434,7 +1553,7 @@
       args:
         chdir: "{{ app_dirs.gamja }}"
       when: >
-        refresh_apps and
+        (refresh_apps or not gamja_built.stat.exists) and
         nodejs_final_versions.results[0].rc == 0 and
         nodejs_final_versions.results[1].rc == 0
 
@@ -1445,7 +1564,7 @@
       args:
         chdir: "{{ app_dirs.gamja }}"
       when: >
-        refresh_apps and
+        (refresh_apps or not gamja_built.stat.exists) and
         nodejs_final_versions.results[0].rc == 0 and
         nodejs_final_versions.results[1].rc == 0
       register: gamja_build_result
@@ -1477,10 +1596,15 @@
         nodejs_final_versions.results[0].rc == 0 and
         nodejs_final_versions.results[1].rc == 0
 
+    - name: Verificar se o The Lounge já está instalado
+      ansible.builtin.stat:
+        path: /usr/local/bin/thelounge
+      register: thelounge_installed
+
     - name: Instalar The Lounge via yarn
       ansible.builtin.shell: yarn global add thelounge
       when: >
-        refresh_apps and
+        (refresh_apps or not thelounge_installed.stat.exists) and
         nodejs_final_versions.results[0].rc == 0 and
         nodejs_final_versions.results[1].rc == 0
 

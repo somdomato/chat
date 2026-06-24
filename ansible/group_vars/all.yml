@@ -57,7 +57,16 @@ ansible_user: root
 ansible_python_interpreter: "/usr/bin/python3"
 
 # Configurações do sistema
-refresh_apps: true
+# refresh_apps força o re-download/rebuild dos apps de terceiros (Ergo,
+# KiwiIRC, plugin-conference, jicofo/jvb/jitsi-meet-web) mesmo se já
+# instalados — é o que tornava todo "ansible-playbook" lento, repetindo
+# downloads e o build (npm install + webpack) do plugin-conference a cada
+# execução. As tarefas já têm verificação de "já instalado" como fallback,
+# então o normal é deixar false e só forçar com:
+#   ansible-playbook playbook.yml -e refresh_apps=true
+# (por exemplo depois de bumpar uma versão em jitsi_*_deb_version/ergo_version
+# ou kiwiirc v1.7.1, já que essas versões não são comparadas automaticamente).
+refresh_apps: false
 
 # Certificados SSL
 ssl_cert_dir: "/etc/letsencrypt/live"

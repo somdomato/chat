@@ -241,6 +241,83 @@ sudo restorecon -Rv /usr/share/kiwiirc
 sudo restorecon -Rv /opt/webircgateway
 ```
 
+### Webcam/conferência do Jitsi Meet trava em "loading" infinito
+
+Esse sintoma teve **quatro causas distintas e independentes**, todas no mesmo
+fluxo (conferência embutida via plugin "conference" do KiwiIRC + Jitsi Meet
+self-hosted). Todas já estão corrigidas no playbook, mas documentado aqui
+porque qualquer uma pode voltar a aparecer isoladamente (ex.: reinstalação
+parcial, novo domínio adicionado, upgrade de versão do plugin/Jitsi).
+
+Para diagnosticar de novo do zero, **nessa ordem**:
+
+1. **Cliente nunca tenta conectar nada (zero atividade em jicofo/jvb/prosody
+   durante a tentativa)** → o problema é no navegador, antes de qualquer rede.
+   Abra o DevTools (F12 → Console) e tente de novo.
+   - Erro `Uncaught DOMException: Permission denied to access property
+     "__v_isRef" on cross-origin object`, geralmente em milhares de linhas
+     repetidas, vindo de `external_api.js`/`plugin-conference.js`: bug do
+     `kiwiirc/plugin-conference` com Vue 3. `this.api = new
+     window.JitsiMeetExternalAPI(...)` é guardado numa propriedade reativa do
+     Vue (`data() { return { api: null } }`); o Vue tenta observar essa
+     instância recursivamente, e como ela guarda uma referência ao `Window`
+     do iframe (cross-origin), toda mensagem que o iframe manda (nível de
+     áudio, stats — várias por segundo) dispara o bloqueio do Firefox.
+     Resultado: o evento `videoConferenceJoined` nunca dispara → loading
+     infinito. Corrigido envolvendo a instância com `kiwi.Vue.markRaw()`
+     (ver task "Patch: remover reatividade do Vue..." no playbook, que
+     também já corrige um bug relacionado e mais antigo — `configOverwrite`/
+     `interfaceConfigOverwrite` reativos sendo clonados via
+     `JSON.parse(JSON.stringify(...))`).
+
+2. **Cliente conecta e autentica via XMPP, mas o JVB nunca aparece
+   disponível** → cheque `tail -f /var/log/jitsi/jvb.log` no servidor.
+   - `CertificateException: ... does not authenticate
+     auth.{{ domains.meet }}` em loop (e o arquivo crescendo sem parar, já
+     vimos 8GB): `auth.{{ domains.meet }}` é um vhost XMPP **interno**
+     (jicofo/JVB só), nunca terá certificado público válido — não tente
+     emitir um para ele. Corrigido com `DISABLE_CERTIFICATE_VERIFICATION =
+     true` no `jvb.conf` e `disable-certificate-verification = true` no
+     `jicofo.conf` (gerados pelo playbook).
+   - Se for **só** o domínio público (`{{ domains.meet }}`) que está fora do
+     certificado: o certbot do playbook usa `--keep-until-expiring`, que
+     **não expande** o SAN de um certificado já válido mesmo que a lista de
+     `-d` tenha mudado — ele simplesmente não faz nada (ou, sem
+     `--cert-name`, cria uma lineage **duplicada** sem afetar a em uso).
+     Corrigido com `--cert-name {{ domains.irc }} --expand` na task
+     "Obter certificados SSL para todos os domínios".
+
+3. **JVB/jicofo conectam e ficam saudáveis, log não cresce mais, mas o
+   navegador mostra `Strophe error ... "reason":"service-unavailable"
+   ... "operation":"conference request (IQ)" ...
+   "targetJid":"focus.{{ domains.meet }}"`**, e o `jicofo.log` não registra
+   **nenhuma** tentativa (nem erro, nem sucesso) → o componente
+   `Component "focus.{{ domains.meet }}" "client_proxy"` (que expõe o
+   jicofo pro cliente web) depende de uma **assinatura de roster** (presence
+   subscription) prévia com `focus@auth.{{ domains.meet }}`, criada pelo
+   próprio `mod_client_proxy.lua` **uma única vez**, no boot do Prosody. Se o
+   jicofo (Java, mais lento pra subir) ainda não tiver autenticado nesse
+   exato instante, a assinatura se perde pra sempre — sem ela, todo IQ de
+   criação de conferência recebe `service-unavailable` sem nunca chegar no
+   jicofo. Resolvido manualmente uma vez com:
+   ```bash
+   prosodyctl mod_roster_command subscribe focus.{{ domains.meet }} focus@auth.{{ domains.meet }}
+   ```
+   e persistido no playbook (task "Assinar roster do client_proxy -> focus",
+   guardada por um marker em `/etc/jitsi/.client_proxy_roster_subscribed`
+   pra não reexecutar — e não reiniciar os serviços jitsi — em toda run).
+   Comentário do próprio autor do `mod_roster_command.lua`: *"Used by
+   Ansible to subscribe focus.\<domain\> to focus@auth.\<domain\>"*.
+
+4. **Área do vídeo muito pequena dentro do widget de chat** (não trava,
+   só visual): `viewHeight` do plugin "conference" no `client.json` do
+   KiwiIRC tem default de `40%`. Ajustado para `80%`.
+
+Pra forçar a re-checagem do passo 3 manualmente (ex.: se o roster for
+apagado por algum motivo): `rm /etc/jitsi/.client_proxy_roster_subscribed`
+no servidor e rode o playbook de novo — ele detecta a ausência do marker,
+reassina e reinicia jicofo/jvb/prosody sozinho.
+
 ## 📝 Notas
 
 ### Gamja (Desabilitado)
