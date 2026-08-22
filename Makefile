@@ -1,12 +1,11 @@
-# Makefile — comandos de conveniência para o ambiente Docker
+# Makefile — comandos de conveniência para o ambiente Podman
 # Uso: make <target>   (execute na raiz do repositório)
 
-COMPOSE = docker compose -f docker/docker-compose.yml --env-file docker/.env
-COMPOSE_TG = docker compose -f docker/docker-compose.yml -f docker/docker-compose.telegram.yml --env-file docker/.env
+COMPOSE = podman compose -f podman/compose.yml --env-file podman/.env
+COMPOSE_TG = podman compose -f podman/compose.yml -f podman/compose.telegram.yml --env-file podman/.env
 
-.PHONY: help up down build build-ergo build-webircgateway build-thelounge build-nginx restart \
+.PHONY: help deploy up down build build-ergo build-webircgateway build-thelounge build-nginx restart \
         logs logs-ergo logs-webircgateway logs-thelounge logs-nginx \
-        ssl setup \
         ergo-shell webircgateway-shell thelounge-shell nginx-shell \
         ergo-restart webircgateway-restart thelounge-restart nginx-restart \
         up-telegram down-telegram build-matterbridge logs-matterbridge \
@@ -19,12 +18,14 @@ help: ## Mostra esta ajuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
-# ── Setup inicial ────────────────────────────────────────────────────────────
+# ── Deploy local ─────────────────────────────────────────────────────────────
+# Um único comando para subir o ambiente do zero (primeira vez) ou depois de
+# atualizar o código — idempotente, pode rodar quantas vezes quiser. Ambiente
+# local é sempre plaintext (sem TLS), então não há certificados a gerar.
 
-setup: ## Configura tudo do zero (certs + .env + build + up)
-	@echo "⚙️  Setup inicial..."
-	@[ -f docker/.env ] || cp docker/.env.example docker/.env && echo "  → docker/.env criado"
-	@bash docker/generate-certs.sh
+deploy: ## Sobe (ou atualiza) o ambiente local inteiro: .env + build + up
+	@echo "🚀 Deploy local..."
+	@[ -f podman/.env ] || (cp podman/.env.example podman/.env && echo "  → podman/.env criado")
 	@$(MAKE) build
 	@$(MAKE) up
 	@echo ""
@@ -33,9 +34,6 @@ setup: ## Configura tudo do zero (certs + .env + build + up)
 	@echo "   Gamja:      http://localhost:9081"
 	@echo "   The Lounge: http://localhost:9082"
 	@echo "   IRC:        localhost:6667"
-
-ssl: ## Gera certificados TLS locais (mkcert ou openssl)
-	bash docker/generate-certs.sh
 
 # ── Ciclo de vida ────────────────────────────────────────────────────────────
 
@@ -71,8 +69,8 @@ ps: ## Lista containers em execução
 	$(COMPOSE) ps
 
 # ── Ponte IRC <-> Telegram (Matterbridge, opcional) ──────────────────────────
-# Não sobe junto com `make up` — precisa de docker/.env com TELEGRAM_BOT_TOKEN
-# e TELEGRAM_CHAT_ID preenchidos (veja docker/.env.example).
+# Não sobe junto com `make up` — precisa de podman/.env com TELEGRAM_BOT_TOKEN
+# e TELEGRAM_CHAT_ID preenchidos (veja podman/.env.example).
 
 up-telegram: ## Sobe a ponte Telegram (requer a stack principal já rodando)
 	$(COMPOSE_TG) up -d --build matterbridge

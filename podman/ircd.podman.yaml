@@ -1,4 +1,4 @@
-# Configuração do Ergo para Docker (desenvolvimento)
+# Configuração do Ergo para Podman (desenvolvimento)
 # Diferenças da produção:
 #   - Sem TLS (certificados auto-assinados não necessários em dev)
 #   - WebSocket sem TLS nas portas 8067 e 8097

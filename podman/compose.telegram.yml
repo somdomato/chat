@@ -1,11 +1,11 @@
 # Ponte IRC <-> Telegram (Matterbridge) – stack OPCIONAL.
 #
-# Não sobe com `docker compose -f docker/docker-compose.yml up`. Só é
+# Não sobe com `podman compose -f podman/compose.yml up`. Só é
 # adicionada explicitamente, DEPOIS da stack principal já estar no ar, para
 # não arriscar quebrar o Ergo/KiwiIRC/Gamja/The Lounge que já funcionam:
 #
-#   podman compose -f docker/docker-compose.yml up -d                   # 1. stack principal (já existente)
-#   podman compose -f docker/docker-compose.telegram.yml up -d --build  # 2. ponte Telegram (opcional)
+#   podman compose -f podman/compose.yml up -d                   # 1. stack principal (já existente)
+#   podman compose -f podman/compose.telegram.yml up -d --build  # 2. ponte Telegram (opcional)
 #
 # Não combine os dois arquivos num único `-f a -f b up` a partir do zero: a
 # rede "chat-network" é declarada `external: true` aqui (ela já existe,
@@ -13,18 +13,18 @@
 # da rede existir, a criação da rede pela stack principal quebra. Suba
 # sempre a stack principal primeiro, com o compose principal sozinho.
 #
-# Requer TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID em docker/.env
-# (veja docker/.env.example e a seção "Ponte IRC <-> Telegram" no README.md).
+# Requer TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID em podman/.env
+# (veja podman/.env.example e a seção "Ponte IRC <-> Telegram" no README.md).
 
 services:
   matterbridge:
     container_name: chat-matterbridge
     build:
       context: ..
-      dockerfile: docker/Dockerfile.matterbridge
+      dockerfile: podman/Containerfile.matterbridge
     environment:
-      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:?defina TELEGRAM_BOT_TOKEN em docker/.env}"
-      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:?defina TELEGRAM_CHAT_ID em docker/.env}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:?defina TELEGRAM_BOT_TOKEN em podman/.env}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:?defina TELEGRAM_CHAT_ID em podman/.env}"
     networks:
       - chat-network
     restart: unless-stopped

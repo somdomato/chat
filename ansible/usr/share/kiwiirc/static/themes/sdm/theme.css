@@ -1,6 +1,6 @@
 /* Tema "SDM" — variante clara do tema customizado do KiwiIRC.
    Veja o README.md ("Temas do KiwiIRC e Gamja") para o fluxo completo de
-   edição, rebuild (docker compose) e deploy (scripts/sync.sh / ansible.sh). */
+   edição, rebuild (podman compose) e deploy (scripts/sync.sh / ansible.sh). */
 @import '../common/base.css';
 
 :root {

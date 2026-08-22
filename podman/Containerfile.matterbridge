@@ -1,6 +1,6 @@
 # Matterbridge – ponte IRC ↔ Telegram (compilada do fonte, multi-arch nativo)
 #
-# Segue o mesmo padrão do Dockerfile.webircgateway: compila o binário Go a
+# Segue o mesmo padrão do Containerfile.webircgateway: compila o binário Go a
 # partir do repositório oficial em vez de puxar uma imagem/release pré-buildada,
 # assim funciona em qualquer arquitetura sem depender de qual release tem
 # binário pronto para ela.
@@ -17,8 +17,8 @@ FROM public.ecr.aws/docker/library/alpine:3.21
 RUN apk add --no-cache ca-certificates gettext
 
 COPY --from=builder /src/matterbridge /opt/matterbridge/matterbridge
-COPY docker/matterbridge.docker.toml.tmpl /opt/matterbridge/matterbridge.toml.tmpl
-COPY docker/matterbridge-entrypoint.sh /opt/matterbridge/entrypoint.sh
+COPY podman/matterbridge.podman.toml.tmpl /opt/matterbridge/matterbridge.toml.tmpl
+COPY podman/matterbridge-entrypoint.sh /opt/matterbridge/entrypoint.sh
 RUN chmod +x /opt/matterbridge/entrypoint.sh
 
 WORKDIR /opt/matterbridge

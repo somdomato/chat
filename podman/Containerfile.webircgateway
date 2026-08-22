@@ -12,7 +12,7 @@ FROM public.ecr.aws/docker/library/alpine:3.21
 RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /src/webircgateway /opt/webircgateway/webircgateway
-COPY docker/webircgateway.docker.conf /opt/webircgateway/config.conf
+COPY podman/webircgateway.podman.conf /opt/webircgateway/config.conf
 
 WORKDIR /opt/webircgateway
 EXPOSE 7778

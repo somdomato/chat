@@ -25,7 +25,7 @@ RUN case "${TARGETARCH}" in \
 RUN groupadd -r ergo && useradd -r -g ergo -d /var/lib/ergo -s /sbin/nologin ergo
 RUN mkdir -p /var/lib/ergo /etc/ergo && chown ergo:ergo /var/lib/ergo
 
-COPY docker/ircd.docker.yaml /etc/ergo/ircd.yaml
+COPY podman/ircd.podman.yaml /etc/ergo/ircd.yaml
 
 WORKDIR /var/lib/ergo
 USER ergo

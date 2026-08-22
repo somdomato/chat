@@ -15,7 +15,7 @@ RUN mkdir -p /var/opt/thelounge && \
 ENV THELOUNGE_HOME=/var/opt/thelounge
 
 # Copiar configuração customizada
-COPY docker/thelounge.config.js /var/opt/thelounge/config.js
+COPY podman/thelounge.config.js /var/opt/thelounge/config.js
 
 USER node
 

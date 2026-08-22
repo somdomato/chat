@@ -10,17 +10,27 @@ Infraestrutura de chat IRC completa usando Ergo, KiwiIRC e WebIRC Gateway.
 | [Stream](https://github.com/somdomato/stream) | [radio.somdomato.com](https://radio.somdomato.com) | IceCast2 & LiquidSoap |
 | [Chat](https://github.com/somdomato/chat) | [chat.somdomato.com](https://chat.somdomato.com) | Ergo IRC Server & Gamja IRC Web Client |
 | [Mobile](https://github.com/somdomato/mobile) |  | Aplicativos iOS e Android da rádio |
-| [Infra](https://github.com/somdomato/infra) |  | Imagens e contêineres do Docker e Ansible Playbooks para desenvolvimento local |
+| [Infra](https://github.com/somdomato/infra) |  | Imagens e contêineres do Podman e Ansible Playbooks para desenvolvimento local |
 
-## Desenvolvimento Local (Docker)
+## Desenvolvimento Local (Podman)
 
 Espelha o ambiente de produção (Oracle Linux 9 arm64) rodando em qualquer arquitetura (amd64/arm64).
 
 ### Subir o ambiente
 
+Um único comando (idempotente — funciona tanto na primeira vez quanto para
+atualizar depois de um `git pull`):
+
 ```bash
 # Na pasta chat/
-podman compose -f docker/docker-compose.yml up -d --build
+make deploy
+```
+
+Isso cria `podman/.env` (se não existir), builda as imagens e sobe tudo em
+background. Equivale a rodar manualmente:
+
+```bash
+podman compose -f podman/compose.yml up -d --build
 ```
 
 | Porta | Serviço |
@@ -30,55 +40,48 @@ podman compose -f docker/docker-compose.yml up -d --build
 | `6667` | IRC plaintext (para clientes IRC diretos) |
 | `9083` | Jitsi Meet – `http://localhost:9083` (opcional, ver [seção de conferência](#-conferência-jitsi-meet-self-hosted)) |
 
-### Via Makefile (monorepo)
-
-```bash
-# Na raiz do monorepo (pasta sdm/)
-make vps2
-```
-
 ### Credenciais de teste
 
 | Serviço | Credencial |
 |---------|-----------|
 | IRC oper | `/oper admin hackme` |
 
-### Configurações Docker
+### Configurações Podman
 
 | Arquivo | Função |
 |---------|--------|
-| `docker/ircd.docker.yaml` | Ergo sem TLS, WebSocket em `:8067` (KiwiIRC) e `:8097` (Gamja) |
-| `docker/webircgateway.docker.conf` | Upstream aponta para `ergo:8067` (Docker DNS) |
-| `docker/nginx.conf` | Porta 80 → KiwiIRC, porta 8080 → Gamja |
-| `docker/kiwiirc.client.json` | Usa `/webirc` relativo (funciona com qualquer porta) |
-| `docker/gamja.config.json` | `ws://localhost:9081/webirc` |
+| `podman/ircd.podman.yaml` | Ergo sem TLS, WebSocket em `:8067` (KiwiIRC) e `:8097` (Gamja) |
+| `podman/webircgateway.podman.conf` | Upstream aponta para `ergo:8067` (DNS da rede do Podman) |
+| `podman/nginx.conf` | Porta 80 → KiwiIRC, porta 8080 → Gamja |
+| `podman/kiwiirc.client.json` | Usa `/webirc` relativo (funciona com qualquer porta) |
+| `podman/gamja.config.json` | `ws://localhost:9081/webirc` |
 
-Diferenças do Docker vs produção:
+Diferenças do Podman vs produção:
 
-| Aspecto | Docker | Produção |
+| Aspecto | Podman | Produção |
 |---------|--------|----------|
 | TLS | Sem TLS (plaintext) | Let's Encrypt via Cloudflare |
 | Ergo porta 6697 | Não exposta | IRC com TLS |
 | WebIRC Gateway bind | `0.0.0.0:7778` | `127.0.0.1:7778` |
 | SELinux | Não aplicável | Configurado pelo Ansible |
 
-### Comandos Docker
+### Comandos Podman
 
 ```bash
 # Logs de todos os serviços
-docker compose -f docker/docker-compose.yml logs -f
+podman compose -f podman/compose.yml logs -f
 
 # Logs de um serviço específico
-docker compose -f docker/docker-compose.yml logs -f ergo
+podman compose -f podman/compose.yml logs -f ergo
 
 # Reiniciar serviço
-docker compose -f docker/docker-compose.yml restart ergo
+podman compose -f podman/compose.yml restart ergo
 
 # Parar tudo
-docker compose -f docker/docker-compose.yml down
+podman compose -f podman/compose.yml down
 
 # Apagar dados do Ergo (banco IRC) e recomeçar do zero
-docker compose -f docker/docker-compose.yml down -v
+podman compose -f podman/compose.yml down -v
 ```
 
 > **Ponte IRC ↔ Telegram (opcional):** não sobe com os comandos acima. Veja a
@@ -503,6 +506,11 @@ working/                           # Backup do que está rodando na VPS
 ├── etc/
 ├── opt/
 └── var/
+
+docs/
+├── TELEGRAM_BRIDGE.md             # Ponte IRC <-> Telegram (Matterbridge) — guia completo
+├── CHANGELOG.md                   # Histórico de mudanças da infraestrutura
+└── MIGRATION.md                   # Guia de migração para Oracle Linux 9
 ```
 
 ## 🔧 Comandos Úteis
@@ -657,12 +665,12 @@ Guia completo para editar a aparência visual do chat, testar localmente e publi
 |---|---|---|
 | Temas do KiwiIRC | `ansible/usr/share/kiwiirc/static/themes/<nome>/theme.css` | Cada tema importa `../common/base.css` e sobrescreve variáveis/seletores |
 | Estilos base (compartilhados por todos os temas) | `ansible/usr/share/kiwiirc/static/themes/common/base.css` | Editado raramente; afeta todos os temas |
-| Tema ativo / lista de temas disponíveis | `ansible/etc/kiwiirc/client.json` (chave `theme` e `themes`) | Em produção. No Docker local, ver `docker/kiwiirc.client.json` |
+| Tema ativo / lista de temas disponíveis | `ansible/etc/kiwiirc/client.json` (chave `theme` e `themes`) | Em produção. No Podman local, ver `podman/kiwiirc.client.json` |
 | Imagens usadas pelos temas (ex. `wood.jpg`, `favicon.png`) | `ansible/usr/share/kiwiirc/static/img/` | Referenciadas nos `theme.css` com caminho relativo `../../img/...` |
 | Código-fonte completo do Gamja | `ansible/usr/share/gamja/` | Vendorizado por completo (não é só CSS) — `style.css` na raiz controla o visual |
-| Config do Gamja | `ansible/usr/share/gamja/config.json` (prod) / `docker/gamja.config.json` (Docker) | |
+| Config do Gamja | `ansible/usr/share/gamja/config.json` (prod) / `podman/gamja.config.json` (Podman) | |
 
-O **KiwiIRC** é distribuído como build pronto (baixado em `.zip` direto do GitHub pelo playbook/Dockerfile) — por isso só os arquivos em `static/themes/` e `static/img/` são editáveis aqui; o restante (`static/js`, `static/css/app.*.css`) vem do release oficial. Já o **Gamja** está vendorizado como código-fonte completo e precisa ser compilado (`npm run build`, via Parcel) a cada alteração.
+O **KiwiIRC** é distribuído como build pronto (baixado em `.zip` direto do GitHub pelo playbook/Containerfile) — por isso só os arquivos em `static/themes/` e `static/img/` são editáveis aqui; o restante (`static/js`, `static/css/app.*.css`) vem do release oficial. Já o **Gamja** está vendorizado como código-fonte completo e precisa ser compilado (`npm run build`, via Parcel) a cada alteração.
 
 ### Como descobrir os nomes de classe certos para estilizar
 
@@ -686,15 +694,15 @@ Ou, mais simples: abra o DevTools do navegador (F12 → Elements) na instância 
 #    ansible/usr/share/gamja/style.css
 
 # 2. Suba (ou reconstrua) a stack local — isso reempacota o tema do KiwiIRC
-#    e recompila o Gamja (stage "gamja-builder" no docker/Dockerfile.nginx)
-docker compose -f docker/docker-compose.yml up -d --build nginx
+#    e recompila o Gamja (stage "gamja-builder" no podman/Containerfile.nginx)
+podman compose -f podman/compose.yml up -d --build nginx
 
 # 3. Acesse no navegador
 #    KiwiIRC → http://localhost:9080
 #    Gamja   → http://localhost:9081
 ```
 
-> Dica: o nginx local serve `static/themes/` com `Cache-Control: no-store` (ver `docker/nginx.conf`), então um simples reload da página já reflete mudanças de CSS — só é necessário `--build` quando o **Gamja** for alterado (precisa recompilar) ou quando o container ainda não existe.
+> Dica: o nginx local serve `static/themes/` com `Cache-Control: no-store` (ver `podman/nginx.conf`), então um simples reload da página já reflete mudanças de CSS — só é necessário `--build` quando o **Gamja** for alterado (precisa recompilar) ou quando o container ainda não existe.
 
 ### Publicar em produção
 
@@ -944,139 +952,22 @@ sudo journalctl -u somdomato-soju -n 50
 O canal `#somdomato` (Ergo) é espelhado no grupo do Telegram
 [**Som do Mato**](https://t.me/somdomato) usando o
 [**Matterbridge**](https://github.com/42wim/matterbridge) — uma ponte de chat
-open source em Go, ativamente mantida, leve (um único binário estático, sem
-runtime/dependências) e a opção mais popular do gênero (bridge genérica
-IRC/Telegram/Discord/Matrix/Slack/etc., >9k estrelas no GitHub). Mensagens
-enviadas em qualquer um dos dois lados aparecem automaticamente no outro.
-
-**Por que Matterbridge e não um bot Telegram feito à mão:** ele já implementa
-os dois lados do protocolo (cliente IRC + Bot API do Telegram), reconexão
-automática, formatação de nomes de usuário e é configurado só com um arquivo
-TOML — sem escrever/manter código próprio de bridge.
-
-### Arquitetura
-
-```
-Telegram (@somdomato) ⇄ Bot API ⇄ Matterbridge ⇄ IRC (nick "TelegramBridge") ⇄ Ergo (#somdomato)
-```
-
-O Matterbridge entra no canal `#somdomato` como **mais um cliente IRC comum**
-(como o KiwiIRC, Gamja, The Lounge ou qualquer cliente IRC direto) — ele não
-precisa de nenhuma mudança no Ergo, no WebIRC Gateway, no Nginx ou nos outros
-clientes já configurados. É estritamente aditivo: se o Matterbridge cair ou
-nunca for configurado, o resto da infraestrutura de chat continua funcionando
-exatamente como antes.
-
-| O quê | Onde |
-|---|---|
-| Dev local (Docker) — build da imagem | `docker/Dockerfile.matterbridge` (compila do source, mesmo padrão do `Dockerfile.webircgateway`) |
-| Dev local (Docker) — stack opcional | `docker/docker-compose.telegram.yml` (não sobe com o `docker compose up -d` padrão) |
-| Dev local (Docker) — template de config | `docker/matterbridge.docker.toml.tmpl` (renderizado pelo `docker/matterbridge-entrypoint.sh` via `envsubst`) |
-| Dev local (Docker) — segredos | `docker/.env` (copiado de `docker/.env.example`, nunca versionado) |
-| Produção (Ansible) — build/instalação | Tasks "MATTERBRIDGE" em `ansible/playbook.yml` (compila do source, igual ao WebIRC Gateway) |
-| Produção (Ansible) — template de config | `ansible/etc/matterbridge/matterbridge.toml.j2` → `/etc/matterbridge/matterbridge.toml` (modo `0640`, dono `matterbridge`) |
-| Produção (Ansible) — serviço systemd | `ansible/etc/systemd/system/somdomato-matterbridge.service` → `somdomato-matterbridge.service` |
-| Produção (Ansible) — segredos | `telegram_bot_token` e `telegram_chat_id` no `ansible/group_vars/vault.yml` (Ansible Vault) |
-| Canal IRC espelhado | `#somdomato` (`matterbridge_irc_channel` em `ansible/group_vars/all.yml`) |
-| Grupo Telegram | [t.me/somdomato](https://t.me/somdomato) |
-
-### Criar o bot no Telegram
-
-1. Fale com [@BotFather](https://t.me/BotFather) e crie um bot (`/newbot`) — copie o token gerado (formato `123456:ABC-DEF...`).
-2. Desative o modo privacidade do bot (senão ele só recebe comandos, não o histórico de mensagens do grupo): `/setprivacy` → escolha o bot → `Disable`.
-3. Adicione o bot ao grupo [Som do Mato](https://t.me/somdomato) como membro (não precisa ser admin).
-4. Descubra o `chat_id` do grupo (é um número negativo, ex: `-1001234567890`):
-   - envie qualquer mensagem no grupo e acesse `https://api.telegram.org/bot<TOKEN>/getUpdates` no navegador, ou
-   - adicione temporariamente o [@getidsbot](https://t.me/getidsbot) ao grupo.
-
-### Rodar localmente (dev)
-
-Não sobe junto com o `podman compose -f docker/docker-compose.yml up -d`
-padrão — é uma stack separada, só necessária se for testar a ponte:
+open source em Go, ativamente mantida, leve e a opção mais popular do gênero
+(bridge genérica IRC/Telegram/Discord/Matrix/Slack/etc.). O Matterbridge
+entra no canal `#somdomato` como **mais um cliente IRC comum** (como o
+KiwiIRC, Gamja ou The Lounge) — é estritamente aditivo, não muda nada no
+Ergo/WebIRC Gateway/Nginx, e só é instalado/habilitado se as credenciais do
+Telegram existirem (dev: `podman/.env`; produção: vault).
 
 ```bash
-# 1. A stack principal já precisa estar no ar (ergo, webircgateway, etc.)
-podman compose -f docker/docker-compose.yml up -d
-
-# 2. Configurar credenciais
-cp docker/.env.example docker/.env
-$EDITOR docker/.env    # preencher TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID
-
-# 3. Subir a ponte
-podman compose -f docker/docker-compose.telegram.yml up -d --build
-# ou, via Makefile (a partir da raiz do repo):
+# Dev local (depois de `make deploy`)
+cp podman/.env.example podman/.env && $EDITOR podman/.env   # TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
 make up-telegram
 ```
 
-Verifique os logs para confirmar que conectou nos dois lados:
-
-```bash
-make logs-matterbridge
-# ou
-podman compose -f docker/docker-compose.telegram.yml logs -f matterbridge
-```
-
-Envie uma mensagem em `#somdomato` (KiwiIRC em `http://localhost:9080`, Gamja
-em `http://localhost:9081` ou qualquer cliente IRC em `localhost:6667`) e
-confirme que ela aparece no grupo do Telegram, e vice-versa.
-
-### Configurar em produção (Ansible)
-
-O bloco "MATTERBRIDGE" do `playbook.yml` só instala/habilita o serviço se
-`telegram_bot_token` **e** `telegram_chat_id` existirem no vault — sem eles,
-nenhuma task relacionada ao Telegram roda, e o restante do playbook (Ergo,
-KiwiIRC, Gamja, The Lounge, soju, Jitsi) não é afetado.
-
-```bash
-# 1. Adicionar as credenciais ao vault
-./scripts/vault.sh edit
-```
-
-Adicione ao `vault.yml`:
-
-```yaml
-telegram_bot_token: "123456:ABC-DEF..."
-telegram_chat_id: "-1001234567890"
-```
-
-```bash
-# 2. Rodar o playbook normalmente
-./scripts/ansible.sh
-```
-
-O Matterbridge roda como usuário de sistema dedicado (`matterbridge`, sem
-shell/home) e conecta ao Ergo via `127.0.0.1:6667` (loopback) — **não abre
-nenhuma porta nova no firewall**, já que ele só faz conexões de saída (para o
-Ergo local e para a API do Telegram).
-
-Verificação:
-
-```bash
-sudo systemctl status somdomato-matterbridge
-sudo journalctl -u somdomato-matterbridge -n 50 -f
-```
-
-### Segurança
-
-- O token do bot fica **só** no vault criptografado (Ansible Vault) e no
-  arquivo `/etc/matterbridge/matterbridge.toml` gerado em produção, com modo
-  `0640` e dono `matterbridge:matterbridge` — nunca em texto plano no
-  repositório (`docker/.env` está no `.gitignore`).
-- O usuário de sistema `matterbridge` roda com `NoNewPrivileges`,
-  `PrivateTmp` e `ProtectSystem=strict` na unit systemd (mesma prática de
-  hardening usada em `somdomato-soju.service`).
-- O bot vê e retransmite **todo** o histórico do grupo do Telegram e do
-  canal IRC — trate o token com o mesmo cuidado de uma senha de admin do
-  grupo.
-
-### Troubleshooting
-
-| Sintoma | Causa provável |
-|---|---|
-| Container/serviço reinicia em loop | `TELEGRAM_BOT_TOKEN`/`telegram_bot_token` errado ou vazio — confira `docker/.env` (dev) ou o vault (prod) |
-| Mensagens do IRC não chegam no Telegram | Bot não está no grupo, ou "Privacy Mode" ainda ativado no @BotFather (`/setprivacy` → `Disable`) |
-| Mensagens do Telegram não chegam no IRC | `TELEGRAM_CHAT_ID`/`telegram_chat_id` errado — confirme que é o `chat_id` do grupo (negativo), não o `user_id` de alguém |
-| `network sdm-chat-network not found` (dev) | Suba a stack principal primeiro: `podman compose -f docker/docker-compose.yml up -d` |
+Documentação completa (arquitetura, criação do bot no @BotFather, passos de
+produção via Ansible/vault, segurança e troubleshooting):
+**[docs/TELEGRAM_BRIDGE.md](docs/TELEGRAM_BRIDGE.md)**.
 
 ---
 
@@ -1215,26 +1106,26 @@ rodam em qualquer distro/arquitetura com JRE, incluindo ARM).
 
 | O quê | Onde |
 |---|---|
-| Build do plugin do KiwiIRC (commit fixado) | Tasks "plugin de conferência" em `ansible/playbook.yml` (prod) / stage `conference-builder` em `docker/Dockerfile.nginx` (dev) |
-| Config do plugin no KiwiIRC | Chaves `plugins` / `conference` em `ansible/etc/kiwiirc/client.json` (prod) e `docker/kiwiirc.client.json` (dev) |
+| Build do plugin do KiwiIRC (commit fixado) | Tasks "plugin de conferência" em `ansible/playbook.yml` (prod) / stage `conference-builder` em `podman/Containerfile.nginx` (dev) |
+| Config do plugin no KiwiIRC | Chaves `plugins` / `conference` em `ansible/etc/kiwiirc/client.json` (prod) e `podman/kiwiirc.client.json` (dev) |
 | Prosody (XMPP) | Pacote `prosody` via EPEL/CRB; vhost gerado de `ansible/etc/prosody/jitsi-meet.cfg.lua.j2` |
 | Jicofo / JVB | Extraídos dos `.deb` oficiais (`download.jitsi.org/stable`) em `/usr/share/jicofo` e `/usr/share/jitsi-videobridge`; units em `ansible/etc/systemd/system/jicofo.service` e `jitsi-videobridge2.service` |
 | Frontend web | Compilado do source de `jitsi/jitsi-meet` (commit fixado) em `/usr/share/jitsi-meet`, igual ao Gamja |
 | Vhost Nginx (prod) | `ansible/etc/nginx/sites.d/16-meet.somdomato.com.conf` — serve os estáticos e faz proxy de `/http-bind` e `/xmpp-websocket` para o Prosody local |
-| Stack opcional para dev local | `docker/jitsi/` (vendorizado do `docker-jitsi-meet`, só para quem quiser testar a feature localmente — não reflete como produção roda) |
+| Stack opcional para dev local | `podman/jitsi/` (vendorizado do `docker-jitsi-meet`, só para quem quiser testar a feature localmente — não reflete como produção roda) |
 | Domínio | `meet.somdomato.com` |
 
 ### Subir o Jitsi localmente (opcional)
 
-Não sobe junto com o `docker compose up -d` padrão do ambiente de dev — é uma
-stack separada (usa Docker só localmente, não em produção), só necessária se
+Não sobe junto com o `podman compose up -d` padrão do ambiente de dev — é uma
+stack separada (usa Podman só localmente, não em produção), só necessária se
 for testar a feature de chamada:
 
 ```bash
-cd docker/jitsi
+cd podman/jitsi
 cp .env.example .env
 ./gen-passwords.sh
-docker compose up -d
+podman compose up -d
 ```
 
 Acesse `http://localhost:9083` para confirmar que o Jitsi local subiu antes de

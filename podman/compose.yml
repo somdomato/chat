@@ -3,7 +3,7 @@
 #
 # Uso:
 #   cd chat
-#   docker compose -f docker/docker-compose.yml up -d
+#   podman compose -f podman/compose.yml up -d
 #
 # Portas expostas no host:
 #   9080 → KiwiIRC    (equivale a chat.somdomato.com)
@@ -19,7 +19,7 @@ services:
     container_name: chat-ergo
     build:
       context: ..
-      dockerfile: docker/Dockerfile.ergo
+      dockerfile: podman/Containerfile.ergo
     ports:
       - "6667:6667"
     volumes:
@@ -38,7 +38,7 @@ services:
     container_name: chat-webircgateway
     build:
       context: ..
-      dockerfile: docker/Dockerfile.webircgateway
+      dockerfile: podman/Containerfile.webircgateway
     depends_on:
       ergo:
         condition: service_healthy
@@ -50,7 +50,7 @@ services:
     container_name: chat-thelounge
     build:
       context: ..
-      dockerfile: docker/Dockerfile.thelounge
+      dockerfile: podman/Containerfile.thelounge
     depends_on:
       ergo:
         condition: service_healthy
@@ -62,7 +62,7 @@ services:
     container_name: chat-nginx
     build:
       context: ..
-      dockerfile: docker/Dockerfile.nginx
+      dockerfile: podman/Containerfile.nginx
     ports:
       - "9080:80"
       - "9081:8080"
