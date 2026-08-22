@@ -1,0 +1,27 @@
+# Ponte IRC <-> Telegram — gerado pelo Ansible, não editar manualmente.
+# O Matterbridge roda no mesmo host do Ergo e conecta via loopback (a porta
+# 6667 do Ergo não precisa ficar aberta na internet para isso).
+
+[irc.somdomato]
+    Server = "127.0.0.1:6667"
+    Nick = "TelegramBridge"
+    UseTLS = false
+    UseSASL = false
+    RemoteNickFormat = "[Telegram] <{NICK}> "
+    JoinDelay = 3
+
+[telegram.somdomato]
+    Token = "{{ telegram_bot_token }}"
+    RemoteNickFormat = "[IRC] <{NICK}> "
+
+[[gateway]]
+    name = "somdomato-bridge"
+    enable = true
+
+    [[gateway.inout]]
+    account = "irc.somdomato"
+    channel = "{{ matterbridge_irc_channel | default('#somdomato') }}"
+
+    [[gateway.inout]]
+    account = "telegram.somdomato"
+    channel = "{{ telegram_chat_id }}"

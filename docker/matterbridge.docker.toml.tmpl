@@ -1,0 +1,29 @@
+# Configuração do Matterbridge para o ambiente Docker local.
+# ${TELEGRAM_BOT_TOKEN} e ${TELEGRAM_CHAT_ID} são substituídos em tempo de
+# execução pelo entrypoint (envsubst) a partir de docker/.env — nunca edite o
+# .toml gerado diretamente, edite este template ou o .env.
+
+[irc.somdomato]
+    Server = "ergo:6667"
+    Nick = "TelegramBridge"
+    UseTLS = false
+    SkipTLSVerify = false
+    UseSASL = false
+    RemoteNickFormat = "[Telegram] <{NICK}> "
+    JoinDelay = 3
+
+[telegram.somdomato]
+    Token = "${TELEGRAM_BOT_TOKEN}"
+    RemoteNickFormat = "[IRC] <{NICK}> "
+
+[[gateway]]
+    name = "somdomato-bridge"
+    enable = true
+
+    [[gateway.inout]]
+    account = "irc.somdomato"
+    channel = "#somdomato"
+
+    [[gateway.inout]]
+    account = "telegram.somdomato"
+    channel = "${TELEGRAM_CHAT_ID}"

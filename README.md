@@ -1,6 +1,6 @@
 # 🎧 Rádio Som do Mato - Infraestrutura IRC
 
-![Rádio Som do Mato](https://raw.githubusercontent.com/somdomato/somdomato/refs/heads/main/public/images/logo.svg "Rádio Som do Mato")
+![Rádio Som do Mato](https://raw.githubusercontent.com/somdomato/somdomato/refs/heads/main/web/static/images/logo.svg "Rádio Som do Mato")
 
 Infraestrutura de chat IRC completa usando Ergo, KiwiIRC e WebIRC Gateway.
 
@@ -80,6 +80,9 @@ docker compose -f docker/docker-compose.yml down
 # Apagar dados do Ergo (banco IRC) e recomeçar do zero
 docker compose -f docker/docker-compose.yml down -v
 ```
+
+> **Ponte IRC ↔ Telegram (opcional):** não sobe com os comandos acima. Veja a
+> seção [💬 Ponte IRC <-> Telegram (Matterbridge)](#-ponte-irc---telegram-matterbridge).
 
 ---
 
@@ -481,8 +484,10 @@ ansible/
 │   │   └── 52-chat.somdomato.com.conf
 │   ├── systemd/system/            # Serviços systemd
 │   │   ├── somdomato-ergo.service
-│   │   └── somdomato-webircgateway.service
+│   │   ├── somdomato-webircgateway.service
+│   │   └── somdomato-matterbridge.service   # ponte IRC <-> Telegram
 │   ├── kiwiirc/                   # Configurações do KiwiIRC
+│   ├── matterbridge/              # Template da config da ponte Telegram
 │   └── letsencrypt/               # Hooks do Let's Encrypt
 └── usr/share/
     ├── ergo/                      # Arquivos do Ergo IRC
@@ -542,16 +547,19 @@ Não existe `ansible/.vault_pass`? Rode `./scripts/vault.sh setup` primeiro (vej
 # No servidor VPS
 sudo systemctl status somdomato-ergo
 sudo systemctl status somdomato-webircgateway
+sudo systemctl status somdomato-matterbridge    # ponte Telegram (se configurada)
 sudo systemctl status nginx
 
 # Reiniciar serviços
 sudo systemctl restart somdomato-ergo
 sudo systemctl restart somdomato-webircgateway
+sudo systemctl restart somdomato-matterbridge
 sudo systemctl restart nginx
 
 # Ver logs em tempo real
 sudo journalctl -u somdomato-ergo -f
 sudo journalctl -u somdomato-webircgateway -f
+sudo journalctl -u somdomato-matterbridge -f
 sudo journalctl -u nginx -f
 ```
 
@@ -928,6 +936,147 @@ openssl s_client -connect irc.somdomato.com:6698
 # 5. Logs de erro
 sudo journalctl -u somdomato-soju -n 50
 ```
+
+---
+
+## 💬 Ponte IRC <-> Telegram (Matterbridge)
+
+O canal `#somdomato` (Ergo) é espelhado no grupo do Telegram
+[**Som do Mato**](https://t.me/somdomato) usando o
+[**Matterbridge**](https://github.com/42wim/matterbridge) — uma ponte de chat
+open source em Go, ativamente mantida, leve (um único binário estático, sem
+runtime/dependências) e a opção mais popular do gênero (bridge genérica
+IRC/Telegram/Discord/Matrix/Slack/etc., >9k estrelas no GitHub). Mensagens
+enviadas em qualquer um dos dois lados aparecem automaticamente no outro.
+
+**Por que Matterbridge e não um bot Telegram feito à mão:** ele já implementa
+os dois lados do protocolo (cliente IRC + Bot API do Telegram), reconexão
+automática, formatação de nomes de usuário e é configurado só com um arquivo
+TOML — sem escrever/manter código próprio de bridge.
+
+### Arquitetura
+
+```
+Telegram (@somdomato) ⇄ Bot API ⇄ Matterbridge ⇄ IRC (nick "TelegramBridge") ⇄ Ergo (#somdomato)
+```
+
+O Matterbridge entra no canal `#somdomato` como **mais um cliente IRC comum**
+(como o KiwiIRC, Gamja, The Lounge ou qualquer cliente IRC direto) — ele não
+precisa de nenhuma mudança no Ergo, no WebIRC Gateway, no Nginx ou nos outros
+clientes já configurados. É estritamente aditivo: se o Matterbridge cair ou
+nunca for configurado, o resto da infraestrutura de chat continua funcionando
+exatamente como antes.
+
+| O quê | Onde |
+|---|---|
+| Dev local (Docker) — build da imagem | `docker/Dockerfile.matterbridge` (compila do source, mesmo padrão do `Dockerfile.webircgateway`) |
+| Dev local (Docker) — stack opcional | `docker/docker-compose.telegram.yml` (não sobe com o `docker compose up -d` padrão) |
+| Dev local (Docker) — template de config | `docker/matterbridge.docker.toml.tmpl` (renderizado pelo `docker/matterbridge-entrypoint.sh` via `envsubst`) |
+| Dev local (Docker) — segredos | `docker/.env` (copiado de `docker/.env.example`, nunca versionado) |
+| Produção (Ansible) — build/instalação | Tasks "MATTERBRIDGE" em `ansible/playbook.yml` (compila do source, igual ao WebIRC Gateway) |
+| Produção (Ansible) — template de config | `ansible/etc/matterbridge/matterbridge.toml.j2` → `/etc/matterbridge/matterbridge.toml` (modo `0640`, dono `matterbridge`) |
+| Produção (Ansible) — serviço systemd | `ansible/etc/systemd/system/somdomato-matterbridge.service` → `somdomato-matterbridge.service` |
+| Produção (Ansible) — segredos | `telegram_bot_token` e `telegram_chat_id` no `ansible/group_vars/vault.yml` (Ansible Vault) |
+| Canal IRC espelhado | `#somdomato` (`matterbridge_irc_channel` em `ansible/group_vars/all.yml`) |
+| Grupo Telegram | [t.me/somdomato](https://t.me/somdomato) |
+
+### Criar o bot no Telegram
+
+1. Fale com [@BotFather](https://t.me/BotFather) e crie um bot (`/newbot`) — copie o token gerado (formato `123456:ABC-DEF...`).
+2. Desative o modo privacidade do bot (senão ele só recebe comandos, não o histórico de mensagens do grupo): `/setprivacy` → escolha o bot → `Disable`.
+3. Adicione o bot ao grupo [Som do Mato](https://t.me/somdomato) como membro (não precisa ser admin).
+4. Descubra o `chat_id` do grupo (é um número negativo, ex: `-1001234567890`):
+   - envie qualquer mensagem no grupo e acesse `https://api.telegram.org/bot<TOKEN>/getUpdates` no navegador, ou
+   - adicione temporariamente o [@getidsbot](https://t.me/getidsbot) ao grupo.
+
+### Rodar localmente (dev)
+
+Não sobe junto com o `podman compose -f docker/docker-compose.yml up -d`
+padrão — é uma stack separada, só necessária se for testar a ponte:
+
+```bash
+# 1. A stack principal já precisa estar no ar (ergo, webircgateway, etc.)
+podman compose -f docker/docker-compose.yml up -d
+
+# 2. Configurar credenciais
+cp docker/.env.example docker/.env
+$EDITOR docker/.env    # preencher TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID
+
+# 3. Subir a ponte
+podman compose -f docker/docker-compose.telegram.yml up -d --build
+# ou, via Makefile (a partir da raiz do repo):
+make up-telegram
+```
+
+Verifique os logs para confirmar que conectou nos dois lados:
+
+```bash
+make logs-matterbridge
+# ou
+podman compose -f docker/docker-compose.telegram.yml logs -f matterbridge
+```
+
+Envie uma mensagem em `#somdomato` (KiwiIRC em `http://localhost:9080`, Gamja
+em `http://localhost:9081` ou qualquer cliente IRC em `localhost:6667`) e
+confirme que ela aparece no grupo do Telegram, e vice-versa.
+
+### Configurar em produção (Ansible)
+
+O bloco "MATTERBRIDGE" do `playbook.yml` só instala/habilita o serviço se
+`telegram_bot_token` **e** `telegram_chat_id` existirem no vault — sem eles,
+nenhuma task relacionada ao Telegram roda, e o restante do playbook (Ergo,
+KiwiIRC, Gamja, The Lounge, soju, Jitsi) não é afetado.
+
+```bash
+# 1. Adicionar as credenciais ao vault
+./scripts/vault.sh edit
+```
+
+Adicione ao `vault.yml`:
+
+```yaml
+telegram_bot_token: "123456:ABC-DEF..."
+telegram_chat_id: "-1001234567890"
+```
+
+```bash
+# 2. Rodar o playbook normalmente
+./scripts/ansible.sh
+```
+
+O Matterbridge roda como usuário de sistema dedicado (`matterbridge`, sem
+shell/home) e conecta ao Ergo via `127.0.0.1:6667` (loopback) — **não abre
+nenhuma porta nova no firewall**, já que ele só faz conexões de saída (para o
+Ergo local e para a API do Telegram).
+
+Verificação:
+
+```bash
+sudo systemctl status somdomato-matterbridge
+sudo journalctl -u somdomato-matterbridge -n 50 -f
+```
+
+### Segurança
+
+- O token do bot fica **só** no vault criptografado (Ansible Vault) e no
+  arquivo `/etc/matterbridge/matterbridge.toml` gerado em produção, com modo
+  `0640` e dono `matterbridge:matterbridge` — nunca em texto plano no
+  repositório (`docker/.env` está no `.gitignore`).
+- O usuário de sistema `matterbridge` roda com `NoNewPrivileges`,
+  `PrivateTmp` e `ProtectSystem=strict` na unit systemd (mesma prática de
+  hardening usada em `somdomato-soju.service`).
+- O bot vê e retransmite **todo** o histórico do grupo do Telegram e do
+  canal IRC — trate o token com o mesmo cuidado de uma senha de admin do
+  grupo.
+
+### Troubleshooting
+
+| Sintoma | Causa provável |
+|---|---|
+| Container/serviço reinicia em loop | `TELEGRAM_BOT_TOKEN`/`telegram_bot_token` errado ou vazio — confira `docker/.env` (dev) ou o vault (prod) |
+| Mensagens do IRC não chegam no Telegram | Bot não está no grupo, ou "Privacy Mode" ainda ativado no @BotFather (`/setprivacy` → `Disable`) |
+| Mensagens do Telegram não chegam no IRC | `TELEGRAM_CHAT_ID`/`telegram_chat_id` errado — confirme que é o `chat_id` do grupo (negativo), não o `user_id` de alguém |
+| `network sdm-chat-network not found` (dev) | Suba a stack principal primeiro: `podman compose -f docker/docker-compose.yml up -d` |
 
 ---
 

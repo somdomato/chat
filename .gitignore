@@ -41,3 +41,6 @@ scripts/legacy/
 # Jitsi Meet (docker-jitsi-meet vendorizado) — segredos e config gerada
 docker/jitsi/.env
 docker/jitsi/.jitsi-meet-cfg/
+
+# Segredos do ambiente Docker local (token/chat_id do Telegram etc.)
+docker/.env

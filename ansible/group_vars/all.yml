@@ -21,6 +21,7 @@ app_dirs:
   jicofo: "/usr/share/jicofo"
   jvb: "/usr/share/jitsi-videobridge"
   jitsimeet: "/usr/share/jitsi-meet"
+  matterbridge: "/opt/matterbridge"
 
 # Jitsi Meet self-hosted — instalação NATIVA (sem Docker), usada pelo plugin
 # "conference" do KiwiIRC. Todos os componentes (jicofo, jvb, web,
@@ -45,6 +46,12 @@ soju_user: "soju"
 soju_group: "soju"
 soju_admin_user: "admin"
 # soju_admin_password: definir no vault.yml
+matterbridge_user: "matterbridge"
+matterbridge_group: "matterbridge"
+# Canal IRC espelhado no grupo do Telegram (https://t.me/somdomato)
+matterbridge_irc_channel: "#somdomato"
+# telegram_bot_token e telegram_chat_id: definir no vault.yml (opcional —
+# a ponte IRC <-> Telegram só é instalada/habilitada se ambos existirem)
 nginx_user: "nginx"
 nginx_group: "nginx"
 

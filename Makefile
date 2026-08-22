@@ -2,12 +2,15 @@
 # Uso: make <target>   (execute na raiz do repositório)
 
 COMPOSE = docker compose -f docker/docker-compose.yml --env-file docker/.env
+COMPOSE_TG = docker compose -f docker/docker-compose.yml -f docker/docker-compose.telegram.yml --env-file docker/.env
 
 .PHONY: help up down build build-ergo build-webircgateway build-thelounge build-nginx restart \
         logs logs-ergo logs-webircgateway logs-thelounge logs-nginx \
         ssl setup \
         ergo-shell webircgateway-shell thelounge-shell nginx-shell \
         ergo-restart webircgateway-restart thelounge-restart nginx-restart \
+        up-telegram down-telegram build-matterbridge logs-matterbridge \
+        matterbridge-shell matterbridge-restart \
         ps
 
 # ── Ajuda ────────────────────────────────────────────────────────────────────
@@ -66,6 +69,29 @@ restart: ## Reinicia todos os serviços
 
 ps: ## Lista containers em execução
 	$(COMPOSE) ps
+
+# ── Ponte IRC <-> Telegram (Matterbridge, opcional) ──────────────────────────
+# Não sobe junto com `make up` — precisa de docker/.env com TELEGRAM_BOT_TOKEN
+# e TELEGRAM_CHAT_ID preenchidos (veja docker/.env.example).
+
+up-telegram: ## Sobe a ponte Telegram (requer a stack principal já rodando)
+	$(COMPOSE_TG) up -d --build matterbridge
+
+down-telegram: ## Para e remove o container da ponte Telegram
+	$(COMPOSE_TG) rm -sf matterbridge
+
+build-matterbridge: ## Reconstrói apenas a imagem do Matterbridge
+	$(COMPOSE_TG) build matterbridge
+	$(COMPOSE_TG) up -d --no-deps matterbridge
+
+logs-matterbridge: ## Logs do container matterbridge
+	$(COMPOSE_TG) logs -f matterbridge
+
+matterbridge-shell: ## Shell no container matterbridge
+	$(COMPOSE_TG) exec matterbridge sh
+
+matterbridge-restart: ## Reinicia apenas o container matterbridge
+	$(COMPOSE_TG) restart matterbridge
 
 # ── Logs ─────────────────────────────────────────────────────────────────────
 

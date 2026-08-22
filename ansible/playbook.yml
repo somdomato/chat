@@ -570,6 +570,18 @@
         create_home: false
         system: true
 
+    - name: "Garante que o grupo exista: {{ matterbridge_group }}"
+      ansible.builtin.group:
+        name: "{{ matterbridge_group }}"
+        state: present
+
+    - name: "Criar usuário de sistema: {{ matterbridge_user }}"
+      ansible.builtin.user:
+        name: "{{ matterbridge_user }}"
+        group: "{{ matterbridge_group }}"
+        create_home: false
+        system: true
+
     - name: Copiar script de instalação de certificados do Let's Encrypt
       ansible.builtin.copy:
         src: "etc/letsencrypt/renewal-hooks/deploy/install-ergo-certificates"
@@ -1519,6 +1531,89 @@
         mode: "0600"
         remote_src: true
 
+    # ===== MATTERBRIDGE (ponte IRC <-> Telegram, opcional) =====
+    # Só é instalada/habilitada se telegram_bot_token e telegram_chat_id
+    # estiverem definidos no vault (./scripts/vault.sh edit). Sem eles, este
+    # bloco inteiro é ignorado e nada relacionado ao Telegram é tocado —
+    # não afeta o Ergo/KiwiIRC/Gamja/The Lounge já em produção.
+    - name: Verificar se o Matterbridge já está instalado
+      ansible.builtin.stat:
+        path: "{{ app_dirs.matterbridge }}/matterbridge"
+      register: matterbridge_binary
+      when: telegram_bot_token is defined and telegram_chat_id is defined
+
+    - name: Clonar repositório do Matterbridge
+      ansible.builtin.git:
+        repo: https://github.com/42wim/matterbridge.git
+        dest: /tmp/matterbridge_build
+        depth: 1
+        force: true
+      when:
+        - telegram_bot_token is defined and telegram_chat_id is defined
+        - not matterbridge_binary.stat.exists
+
+    - name: Compilar Matterbridge
+      ansible.builtin.command:
+        cmd: go build -o matterbridge .
+        chdir: /tmp/matterbridge_build
+      environment:
+        GOPATH: /tmp/go
+        GOCACHE: /tmp/go-cache
+      changed_when: true
+      when:
+        - telegram_bot_token is defined and telegram_chat_id is defined
+        - not matterbridge_binary.stat.exists
+
+    - name: Criar diretório do Matterbridge
+      ansible.builtin.file:
+        path: "{{ app_dirs.matterbridge }}"
+        state: directory
+        owner: "{{ matterbridge_user }}"
+        group: "{{ matterbridge_group }}"
+        mode: "0755"
+      when: telegram_bot_token is defined and telegram_chat_id is defined
+
+    - name: Instalar binário do Matterbridge
+      ansible.builtin.copy:
+        src: /tmp/matterbridge_build/matterbridge
+        dest: "{{ app_dirs.matterbridge }}/matterbridge"
+        owner: "{{ matterbridge_user }}"
+        group: "{{ matterbridge_group }}"
+        mode: "0755"
+        remote_src: true
+      when:
+        - telegram_bot_token is defined and telegram_chat_id is defined
+        - not matterbridge_binary.stat.exists
+
+    - name: Limpar diretório de build do Matterbridge
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/matterbridge_build
+        - /tmp/go
+        - /tmp/go-cache
+      when: telegram_bot_token is defined and telegram_chat_id is defined
+
+    - name: Criar diretório de configuração do Matterbridge
+      ansible.builtin.file:
+        path: /etc/matterbridge
+        state: directory
+        owner: "{{ matterbridge_user }}"
+        group: "{{ matterbridge_group }}"
+        mode: "0750"
+      when: telegram_bot_token is defined and telegram_chat_id is defined
+
+    - name: Gerar configuração do Matterbridge (token do Telegram fica só neste arquivo, modo 0640)
+      ansible.builtin.template:
+        src: "etc/matterbridge/matterbridge.toml.j2"
+        dest: "/etc/matterbridge/matterbridge.toml"
+        owner: "{{ matterbridge_user }}"
+        group: "{{ matterbridge_group }}"
+        mode: "0640"
+      notify: Reiniciar Matterbridge
+      when: telegram_bot_token is defined and telegram_chat_id is defined
+
     - name: Verificar instalação final do Node.js e npm
       ansible.builtin.command: "{{ item }}"
       loop:
@@ -1708,6 +1803,13 @@
       when: is_rhel_family and selinux_status.stdout == "Enforcing"
       changed_when: true
 
+    - name: Aplicar contexto SELinux no diretório do Matterbridge
+      ansible.builtin.command: "restorecon -Rv {{ app_dirs.matterbridge }}"
+      when:
+        - is_rhel_family and selinux_status.stdout == "Enforcing"
+        - telegram_bot_token is defined and telegram_chat_id is defined
+      changed_when: true
+
     - name: Copiar configurações do Nginx
       ansible.builtin.copy:
         src: "etc/nginx/sites.d/{{ item }}"
@@ -1746,6 +1848,16 @@
         - "jicofo.service"
         - "jitsi-videobridge2.service"
 
+    - name: Copiar serviço systemd do Matterbridge
+      ansible.builtin.copy:
+        src: "etc/systemd/system/somdomato-matterbridge.service"
+        dest: "/etc/systemd/system/somdomato-matterbridge.service"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reiniciar Matterbridge
+      when: telegram_bot_token is defined and telegram_chat_id is defined
+
     - name: Abrir portas no firewall (Oracle Linux / RHEL)
       ansible.posix.firewalld:
         port: "{{ item }}"
@@ -1775,6 +1887,14 @@
         - "jicofo.service"
         - "jitsi-videobridge2.service"
         - nginx
+
+    - name: Habilitar e iniciar o Matterbridge (ponte Telegram)
+      ansible.builtin.systemd:
+        name: "somdomato-matterbridge.service"
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: telegram_bot_token is defined and telegram_chat_id is defined
 
     - name: Aguardar socket admin do soju estar disponível
       ansible.builtin.wait_for:
@@ -1821,6 +1941,13 @@
         - "jicofo.service"
         - "jitsi-videobridge2.service"
         # - "somdomato-kiwiirc.service"  # Apenas se necessário
+
+    - name: Reiniciar Matterbridge
+      ansible.builtin.systemd:
+        name: "somdomato-matterbridge.service"
+        daemon_reload: true
+        state: restarted
+      when: telegram_bot_token is defined and telegram_chat_id is defined
 
     - name: Testar configuração do Nginx
       ansible.builtin.command: nginx -t

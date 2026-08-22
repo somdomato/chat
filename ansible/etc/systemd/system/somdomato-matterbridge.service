@@ -1,0 +1,23 @@
+[Unit]
+Description=Matterbridge (ponte IRC <-> Telegram) da Rádio Som do Mato
+After=network.target somdomato-ergo.service
+Wants=somdomato-ergo.service
+
+[Service]
+Type=simple
+User=matterbridge
+Group=matterbridge
+WorkingDirectory=/opt/matterbridge
+ExecStart=/opt/matterbridge/matterbridge -conf /etc/matterbridge/matterbridge.toml
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/matterbridge
+
+[Install]
+WantedBy=multi-user.target
