@@ -532,6 +532,19 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start { color: #fff; 
         padding-bottom: 14px !important;
         line-height: 38px !important;
     }
+
+    /* O textarea do campo de mensagem cresce via JS conforme o
+       scrollHeight do conteúdo. Como fixamos font-size: 16px nos
+       inputs (para evitar o zoom automático do iOS Safari), a altura
+       de uma única linha ficou desproporcionalmente grande no mobile.
+       max-height limita esse crescimento — o campo continua rolável
+       internamente se o texto ultrapassar algumas linhas. */
+    .kiwi-controlinput-input {
+        max-height: 90px !important;
+        line-height: 1.3 !important;
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+    }
 }
 
 /* ================================================================

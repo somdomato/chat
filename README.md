@@ -1161,6 +1161,40 @@ As senhas internas do Jitsi (XMPP) são geradas uma única vez pelo playbook e
 persistidas em `ansible/.secrets/jitsi/` (fora do vault, nunca versionado —
 veja `.gitignore`).
 
+### Ajustar o tamanho da área de vídeo
+
+A altura da área de vídeo (webcam) dentro do KiwiIRC é controlada pela chave
+`conference.viewHeight` do `client.json` (`ansible/etc/kiwiirc/client.json`
+em prod, `podman/kiwiirc.client.json` em dev) — é uma opção do próprio plugin
+`plugin-conference`, não do Jitsi. Aceita porcentagem da altura da janela.
+Estava em `"80%"` (área enorme); ajustado para o padrão do plugin, `"40%"`.
+Depois de mudar, sincronizar com `./scripts/ansible.sh` (prod) ou rebuild do
+container `nginx` (dev) para o novo `client.json` ir pro ar.
+
+### Moderação (mutar/expulsar participantes)
+
+Não existe um painel administrativo do lado do KiwiIRC/SDM para controlar quem
+liga a webcam — quem controla isso é o próprio Jitsi Meet, dentro do iframe
+embutido pelo `plugin-conference`:
+
+- **Quem vira moderador**: como não há autenticação (`ENABLE_AUTH`) nem lobby
+  (`ENABLE_LOBBY`) configurados, o Jicofo usa o comportamento padrão de
+  `auto-owner` — a primeira pessoa a entrar na sala vira moderador
+  automaticamente e ganha acesso ao painel de participantes.
+- **Como silenciar/expulsar alguém**: como moderador, abra o painel de
+  participantes (ícone de pessoas na barra do Jitsi) e use o menu de contexto
+  (três pontinhos) ao lado do nome de cada participante — opções incluem
+  desligar o vídeo/áudio remotamente e "Kick out" (expulsar da chamada).
+- **Isso não é um ban**: um "Kick out" derruba a pessoa só daquela sessão —
+  como não há autenticação nem lobby controlando quem entra, ela pode voltar a
+  entrar na sala imediatamente digitando o mesmo canal/link. Não há
+  banimento persistente hoje.
+- **Para ter controle administrativo de verdade** (ban real, ou restringir
+  quem pode ligar a câmera) seria necessário habilitar autenticação (JWT ou
+  interna) no Prosody para que só usuários logados virem moderadores, e/ou
+  `ENABLE_LOBBY` para aprovar quem entra na sala — nenhum dos dois está
+  configurado atualmente (ver nota de segurança abaixo).
+
 ### Nota de segurança
 
 **Sem autenticação JWT por enquanto.** As salas de conferência são acessíveis

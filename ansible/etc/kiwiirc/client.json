@@ -22,7 +22,7 @@
     "conference": {
         "server": "meet.somdomato.com",
         "secure": false,
-        "viewHeight": "80%",
+        "viewHeight": "40%",
         "configOverwrite": {
             "disableDeepLinking": true
         }

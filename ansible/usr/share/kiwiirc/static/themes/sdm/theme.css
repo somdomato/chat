@@ -375,3 +375,18 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
 .irc-bg-colour-pink { background-color: #f0f; }
 .irc-bg-colour-grey { background-color: #a6a6a6; }
 .irc-bg-colour-light-grey { background-color: #e2e2e2; }
+
+/* O textarea do campo de mensagem cresce via JS conforme o scrollHeight
+   do conteúdo. Como fixamos font-size: 16px nos inputs (para evitar o
+   zoom automático do iOS Safari), a altura de uma única linha ficou
+   desproporcionalmente grande no mobile. max-height limita esse
+   crescimento — o campo continua rolável internamente se o texto
+   ultrapassar algumas linhas. */
+@media (max-width: 769px) {
+    .kiwi-controlinput-input {
+        max-height: 90px !important;
+        line-height: 1.3 !important;
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+    }
+}
