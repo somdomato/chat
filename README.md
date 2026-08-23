@@ -1184,7 +1184,19 @@ embutido pelo `plugin-conference`:
 - **Como silenciar/expulsar alguém**: como moderador, abra o painel de
   participantes (ícone de pessoas na barra do Jitsi) e use o menu de contexto
   (três pontinhos) ao lado do nome de cada participante — opções incluem
-  desligar o vídeo/áudio remotamente e "Kick out" (expulsar da chamada).
+  "Disable camera" (desligar só a câmera dela) e "Kick out" (expulsar da
+  chamada).
+- **Kill switch: desligar a webcam de todo mundo de uma vez ("AV
+  Moderation")**: o componente `av_moderation_component` já está habilitado
+  no Prosody (`avmoderation.{{ domains.meet }}` em
+  `ansible/etc/prosody/jitsi-meet.cfg.lua.j2`), então isso já funciona sem
+  precisar mexer em mais nada no servidor. No painel de participantes, clique
+  em **"More" (⋮)** no rodapé → **"Stop everyone's video"**. Aparece um
+  prompt perguntando se as pessoas podem voltar a ligar a câmera sozinhas
+  depois — escolha "não permitir" pra travar a **moderação de vídeo**: a
+  partir daí ninguém liga a própria câmera sem antes mandar um pedido
+  ("Ask to start video") que o moderador aprova ou recusa. Pra voltar ao
+  normal, desative a moderação de vídeo pelo mesmo menu "More".
 - **Isso não é um ban**: um "Kick out" derruba a pessoa só daquela sessão —
   como não há autenticação nem lobby controlando quem entra, ela pode voltar a
   entrar na sala imediatamente digitando o mesmo canal/link. Não há
