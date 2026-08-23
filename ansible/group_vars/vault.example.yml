@@ -1,0 +1,14 @@
+# Variáveis sensíveis - Use: ansible-vault edit group_vars/vault.yml                                                                                                                        
+---                                                                                                                                                                                         
+# Credenciais do Cloudflare - Modo Legacy (email + API key)                                                                                                                                 
+cloudflare_email: "sistematico@gmail.com"                                                                                                                                                   
+cloudflare_api_key: ""                                                                                                                                 
+                                                                                                                                                                                            
+# Token da API do Cloudflare (alternativo ao modo legacy)                                                                                                                                   
+# cloudflare_api_token: "your_cloudflare_api_token_here"                                                                                                                                    
+                                                                                                                                                                                            
+soju_admin_password: ""                                                                                                                                                                
+                                                                                                                                                                                            
+# Telegram Bridge                                                                                                                                                                           
+telegram_bot_token: ""                                                                                                                                                                      
+telegram_chat_id: "-1001307603557"
