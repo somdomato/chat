@@ -19,6 +19,14 @@
         font-weight: bold;
         padding: 1em;
     }
+    /* Evita que o iOS Safari amplie a tela ao focar em campos de texto.
+       O zoom automático é disparado quando o font-size do input é menor que 16px,
+       independente do maximum-scale no viewport. */
+    input,
+    textarea,
+    select {
+        font-size: 16px !important;
+    }
     </style>
     <style class="embedly-css">
         .card .hdr {
