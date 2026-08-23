@@ -1533,14 +1533,22 @@
 
     # ===== MATTERBRIDGE (ponte IRC <-> Telegram, opcional) =====
     # Só é instalada/habilitada se telegram_bot_token e telegram_chat_id
-    # estiverem definidos no vault (./scripts/vault.sh edit). Sem eles, este
-    # bloco inteiro é ignorado e nada relacionado ao Telegram é tocado —
-    # não afeta o Ergo/KiwiIRC/Gamja/The Lounge já em produção.
+    # estiverem definidos no vault E não vazios (./scripts/vault.sh edit).
+    # Sem eles, este bloco inteiro é ignorado e nada relacionado ao Telegram
+    # é tocado — não afeta o Ergo/KiwiIRC/Gamja/The Lounge já em produção.
+    # `matterbridge_enabled` centraliza a condição para as ~12 tasks/handler
+    # abaixo, em vez de repetir "is defined" em cada uma (uma chave presente
+    # no vault mas vazia, ex. `telegram_bot_token: ""`, não conta como
+    # configurada).
+    - name: Determinar se a ponte Telegram está configurada
+      ansible.builtin.set_fact:
+        matterbridge_enabled: "{{ (telegram_bot_token | default('') | trim | length > 0) and (telegram_chat_id | default('') | trim | length > 0) }}"
+
     - name: Verificar se o Matterbridge já está instalado
       ansible.builtin.stat:
         path: "{{ app_dirs.matterbridge }}/matterbridge"
       register: matterbridge_binary
-      when: telegram_bot_token is defined and telegram_chat_id is defined
+      when: matterbridge_enabled
 
     - name: Clonar repositório do Matterbridge
       ansible.builtin.git:
@@ -1549,7 +1557,7 @@
         depth: 1
         force: true
       when:
-        - telegram_bot_token is defined and telegram_chat_id is defined
+        - matterbridge_enabled
         - not matterbridge_binary.stat.exists
 
     - name: Compilar Matterbridge
@@ -1561,7 +1569,7 @@
         GOCACHE: /tmp/go-cache
       changed_when: true
       when:
-        - telegram_bot_token is defined and telegram_chat_id is defined
+        - matterbridge_enabled
         - not matterbridge_binary.stat.exists
 
     - name: Criar diretório do Matterbridge
@@ -1571,7 +1579,7 @@
         owner: "{{ matterbridge_user }}"
         group: "{{ matterbridge_group }}"
         mode: "0755"
-      when: telegram_bot_token is defined and telegram_chat_id is defined
+      when: matterbridge_enabled
 
     - name: Instalar binário do Matterbridge
       ansible.builtin.copy:
@@ -1582,7 +1590,7 @@
         mode: "0755"
         remote_src: true
       when:
-        - telegram_bot_token is defined and telegram_chat_id is defined
+        - matterbridge_enabled
         - not matterbridge_binary.stat.exists
 
     - name: Limpar diretório de build do Matterbridge
@@ -1593,7 +1601,7 @@
         - /tmp/matterbridge_build
         - /tmp/go
         - /tmp/go-cache
-      when: telegram_bot_token is defined and telegram_chat_id is defined
+      when: matterbridge_enabled
 
     - name: Criar diretório de configuração do Matterbridge
       ansible.builtin.file:
@@ -1602,7 +1610,7 @@
         owner: "{{ matterbridge_user }}"
         group: "{{ matterbridge_group }}"
         mode: "0750"
-      when: telegram_bot_token is defined and telegram_chat_id is defined
+      when: matterbridge_enabled
 
     - name: Gerar configuração do Matterbridge (token do Telegram fica só neste arquivo, modo 0640)
       ansible.builtin.template:
@@ -1612,7 +1620,7 @@
         group: "{{ matterbridge_group }}"
         mode: "0640"
       notify: Reiniciar Matterbridge
-      when: telegram_bot_token is defined and telegram_chat_id is defined
+      when: matterbridge_enabled
 
     - name: Verificar instalação final do Node.js e npm
       ansible.builtin.command: "{{ item }}"
@@ -1807,7 +1815,7 @@
       ansible.builtin.command: "restorecon -Rv {{ app_dirs.matterbridge }}"
       when:
         - is_rhel_family and selinux_status.stdout == "Enforcing"
-        - telegram_bot_token is defined and telegram_chat_id is defined
+        - matterbridge_enabled
       changed_when: true
 
     - name: Copiar configurações do Nginx
@@ -1856,7 +1864,7 @@
         group: root
         mode: "0644"
       notify: Reiniciar Matterbridge
-      when: telegram_bot_token is defined and telegram_chat_id is defined
+      when: matterbridge_enabled
 
     - name: Abrir portas no firewall (Oracle Linux / RHEL)
       ansible.posix.firewalld:
@@ -1894,7 +1902,7 @@
         enabled: true
         state: started
         daemon_reload: true
-      when: telegram_bot_token is defined and telegram_chat_id is defined
+      when: matterbridge_enabled
 
     - name: Aguardar socket admin do soju estar disponível
       ansible.builtin.wait_for:
@@ -1942,12 +1950,20 @@
         - "jitsi-videobridge2.service"
         # - "somdomato-kiwiirc.service"  # Apenas se necessário
 
+    - name: Verificar se a unit do Matterbridge existe antes de reiniciar
+      ansible.builtin.stat:
+        path: /etc/systemd/system/somdomato-matterbridge.service
+      register: matterbridge_unit_file
+      when: matterbridge_enabled
+      listen: Reiniciar Matterbridge
+
     - name: Reiniciar Matterbridge
       ansible.builtin.systemd:
         name: "somdomato-matterbridge.service"
         daemon_reload: true
         state: restarted
-      when: telegram_bot_token is defined and telegram_chat_id is defined
+      when: matterbridge_enabled and matterbridge_unit_file.stat.exists
+      listen: Reiniciar Matterbridge
 
     - name: Testar configuração do Nginx
       ansible.builtin.command: nginx -t

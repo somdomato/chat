@@ -33,7 +33,13 @@ ao Telegram é tocada:
 - **Dev (Podman):** vive num `compose.telegram.yml` separado, que só sobe com
   comando explícito (nunca junto do `podman compose up` padrão).
 - **Produção (Ansible):** o bloco inteiro de tasks só roda se
-  `telegram_bot_token` **e** `telegram_chat_id` existirem no vault.
+  `telegram_bot_token` **e** `telegram_chat_id` existirem no vault **e não
+  estiverem vazios** — o playbook calcula isso uma vez em
+  `matterbridge_enabled` (fato definido no início do bloco "MATTERBRIDGE" em
+  `ansible/playbook.yml`) e usa esse fato em todas as tasks/handler
+  relacionados, em vez de repetir a checagem em cada uma. Uma chave presente
+  no vault mas com valor `""` (placeholder esquecido) conta como
+  "não configurado", não como "configurado com token vazio".
 
 ## Mapa de arquivos
 
@@ -176,6 +182,108 @@ O template `matterbridge.toml.j2` é reaplicado e o serviço reinicia
 automaticamente (handler `Reiniciar Matterbridge`) só quando o arquivo de
 config ou a unit systemd mudam.
 
+## Bridging para múltiplos grupos do Telegram (planejado, não implementado)
+
+> **Status:** documentado com placeholders comentados nos templates para
+> referência futura. **Ninguém deve ativar isso ainda** — os grupos que vão
+> receber a ponte ainda estão sendo definidos. Esta seção existe para que,
+> quando a decisão estiver tomada, a implementação seja um passo mecânico
+> guiado por este documento, e não uma investigação do zero.
+
+### É possível?
+
+Sim. O Matterbridge não tem limite de "um grupo só" — qualquer número de
+contas pode ser colocado dentro do mesmo `[[gateway]]`, e todas ficam
+interligadas entre si automaticamente (full-mesh dentro do gateway). Isso
+significa que espelhar `#somdomato` em **dois** grupos do Telegram é só
+adicionar um segundo bloco `[[gateway.inout]]` apontando para o `chat_id` do
+segundo grupo:
+
+```toml
+[irc.somdomato]
+    Server = "127.0.0.1:6667"    # (config de produção; em dev é "ergo:6667")
+    Nick = "TelegramBridge"
+    # ... resto igual ao que já existe
+
+[telegram.somdomato]
+    Token = "TOKEN_DO_BOT"
+    RemoteNickFormat = "[IRC] <{NICK}> "
+
+[[gateway]]
+    name = "somdomato-bridge"
+    enable = true
+
+    [[gateway.inout]]
+    account = "irc.somdomato"
+    channel = "#somdomato"
+
+    [[gateway.inout]]
+    account = "telegram.somdomato"
+    channel = "-1001111111111"   # grupo 1 (já existente, ex.: Som do Mato)
+
+    [[gateway.inout]]
+    account = "telegram.somdomato"
+    channel = "-1002222222222"   # grupo 2 (placeholder — a definir)
+```
+
+**Efeito colateral a entender antes de ativar:** como as contas de um mesmo
+gateway são interligadas entre si, uma mensagem enviada no grupo 1 aparece
+não só no IRC, mas também (via IRC) no grupo 2, e vice-versa. Ou seja, os
+dois grupos do Telegram passam a conversar um com o outro através do
+`#somdomato` — não é "IRC → grupo 1" e "IRC → grupo 2" isolados, é um bridge
+de três pontas. Se isso não for desejado (ex.: grupo 2 deveria só *ouvir* o
+IRC, sem que mensagens do grupo 1 apareçam nele), a solução é usar **dois
+gateways separados**, cada um com sua própria conta IRC (exige uma segunda
+conexão IRC — outro nick — o que é mais pesado e só compensa se o isolamento
+for realmente necessário).
+
+### Duas formas de fazer
+
+| Abordagem | Como | Quando usar |
+|---|---|---|
+| **Mesmo bot em dois grupos** (mais simples) | Adiciona o bot já existente ([@BotFather](https://t.me/BotFather)) ao segundo grupo também, pega o `chat_id` dele, adiciona o `[[gateway.inout]]` extra | Caso padrão — não precisa criar bot novo, só repetir os passos de ["Criar o bot no Telegram"](#criar-o-bot-no-telegram) para descobrir o `chat_id` do segundo grupo |
+| **Bot separado por grupo** | Cria um segundo bot no @BotFather, uma segunda seção `[telegram.somdomato2]` com seu próprio `Token`, e usa essa conta no segundo `[[gateway.inout]]` | Só se quiser identidade visual diferente por grupo (nome do bot aparece nas mensagens) ou isolar permissões — não é o caso de uso mais comum |
+
+### O que precisa mudar quando for implementar
+
+**Produção (`ansible/`):**
+
+1. `ansible/group_vars/all.yml` — trocar (ou complementar) `telegram_chat_id`
+   único por uma lista, ex. `telegram_chat_ids: ["-1001111111111",
+   "-1002222222222"]`, ou manter `telegram_chat_id` como "grupo principal" e
+   adicionar `telegram_chat_id_2` como opcional (mais simples de implementar
+   incrementalmente, sem quebrar quem só tem um grupo configurado).
+2. `ansible/etc/matterbridge/matterbridge.toml.j2` — já tem um comentário
+   Jinja2 (`{# ... #}`) mostrando exatamente onde entraria um loop `{% for
+   chat_id in telegram_chat_ids %} ... {% endfor %}` no lugar do bloco fixo
+   de `[[gateway.inout]]` do Telegram.
+3. `ansible/playbook.yml` — o fato `matterbridge_enabled` (bloco
+   `# ===== MATTERBRIDGE`) hoje checa só `telegram_bot_token` +
+   `telegram_chat_id`; precisaria decidir se o segundo grupo é opcional
+   (bridge continua funcionando só com o grupo 1) ou obrigatório junto do
+   primeiro.
+4. `./scripts/vault.sh edit` — adicionar a nova chave (`telegram_chat_ids` ou
+   `telegram_chat_id_2`) ao vault quando os grupos estiverem definidos.
+
+**Dev local (`podman/`):**
+
+1. `podman/matterbridge.podman.toml.tmpl` — já tem um bloco comentado
+   mostrando o segundo `[[gateway.inout]]` com placeholder
+   `${TELEGRAM_CHAT_ID_2}`. Como o entrypoint usa `envsubst` (sem
+   loop/condicional), suportar um número **variável** de grupos em dev exige
+   trocar a estratégia de renderização (ex.: gerar o `.toml` com um script
+   Python/Jinja2 real dentro do `Containerfile.matterbridge`, em vez de
+   `envsubst`) — vale a pena só se o número de grupos for realmente dinâmico;
+   para "sempre 2 grupos fixos" um segundo placeholder simples já resolve.
+2. `podman/matterbridge-entrypoint.sh` — adicionar a validação/echo de aviso
+   para `TELEGRAM_CHAT_ID_2` (hoje só avisa sobre `TELEGRAM_BOT_TOKEN`/
+   `TELEGRAM_CHAT_ID`).
+3. `podman/.env.example` — documentar a variável nova.
+
+Nada disso está implementado — os dois templates (`matterbridge.toml.j2` e
+`matterbridge.podman.toml.tmpl`) só têm o bloco comentado como referência, e
+`matterbridge_enabled`/`playbook.yml` continuam sabendo de um único grupo.
+
 ## Segurança
 
 - O token do bot fica **só** no vault criptografado (Ansible Vault) e no
@@ -199,7 +307,8 @@ config ou a unit systemd mudam.
 | Mensagens do IRC não chegam no Telegram | Bot não está no grupo, ou "Privacy Mode" ainda ativado no @BotFather (`/setprivacy` → `Disable`) |
 | Mensagens do Telegram não chegam no IRC | `TELEGRAM_CHAT_ID`/`telegram_chat_id` errado — confirme que é o `chat_id` do grupo (negativo), não o `user_id` de alguém |
 | `network sdm-chat-network not found` (dev) | Suba a stack principal primeiro: `make deploy` |
-| Task "MATTERBRIDGE" pulada no playbook (nada acontece) | Esperado se `telegram_bot_token`/`telegram_chat_id` não estiverem no vault — rode `./scripts/vault.sh edit` |
+| Task "MATTERBRIDGE" pulada no playbook (nada acontece) | Esperado se `telegram_bot_token`/`telegram_chat_id` não estiverem no vault (ou estiverem vazios) — rode `./scripts/vault.sh edit` |
+| `[ERROR] Could not find the requested service somdomato-matterbridge.service` no handler "Reiniciar Matterbridge" (playbook falha) | Bug corrigido: o handler agora confere se a unit existe em disco antes de tentar reiniciar (`when: matterbridge_enabled and matterbridge_unit_file.stat.exists`) — nunca mais derruba o playbook inteiro por causa disso. Se ainda acontecer, rode `./scripts/ansible.sh` de novo (idempotente); o Ergo/KiwiIRC/Gamja não são afetados por essa falha, que ocorre só no final do playbook |
 | `somdomato-matterbridge` não inicia em produção | `sudo journalctl -u somdomato-matterbridge -n 50` — geralmente token/chat_id inválido ou Ergo (`127.0.0.1:6667`) fora do ar |
 
 ## Referências

@@ -75,10 +75,7 @@ textarea {
 }
 
 /* ---- Remove borders ---- */
-.kiwi-header { border-bottom: none !important; }
-.kiwi-controlinput { border-top: none !important; }
-.kiwi-container--sidebar-open .kiwi-sidebar { border: none !important; }
-.kiwi-container-toggledraw-statebrowser { border-right: none !important; }
+.kiwi-header { border-bottom: 1px solid #262626 !important; }
 .kiwi-container-toggledraw-sidebar { display: none !important; }
 .kiwi-statebrowser-channels .kiwi-statebrowser-channel {
     border-bottom: none !important;
@@ -433,6 +430,109 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start { color: #fff; 
 .kiwi-messagelist-message--info-open .u-link { color: #fff; }
 .kiwi-welcome-simple-start { color: #fff !important; }
 .kiwi-header-option--active a { color: #e4e4e4 !important; }
+
+/* ================================================================
+   CHAT UI (pós-login) — Input de mensagem + Lista de membros
+   Objetivo: dar contorno/hierarquia visual clara a essas duas áreas,
+   que antes eram "planas" (sem borda, sem fundo diferenciado) e
+   confundiam o usuário — sobretudo no mobile, onde não fica óbvio
+   onde tocar para digitar ou ver quem está no canal.
+   ================================================================ */
+
+/* ---- Campo de mensagem: contorno fino e discreto, sem inflar a altura
+   nativa do componente (a barra já tem sua própria altura calculada
+   via JS — evitar padding extra no container, só no wrap interno). ---- */
+.kiwi-controlinput {
+    border-top: 1px solid #262626 !important;
+    background: #161616 !important;
+}
+
+.kiwi-controlinput-input-wrap {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 8px !important;
+    margin: 6px 8px !important;
+    transition: border-color 0.15s ease, background 0.15s ease !important;
+}
+
+.kiwi-controlinput--focus .kiwi-controlinput-input-wrap {
+    border-color: var(--brand-primary) !important;
+    background: rgba(255, 255, 255, 0.07) !important;
+}
+
+.kiwi-controlinput-input {
+    color: var(--brand-default-fg) !important;
+}
+
+.kiwi-controlinput-input::placeholder {
+    color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* Botão de enviar — discreto, só ganha a cor da marca (sem pill grande) */
+.kiwi-controlinput-send {
+    color: var(--brand-primary) !important;
+    font-weight: 700 !important;
+}
+.kiwi-controlinput-send:hover {
+    color: var(--brand-primary-hover) !important;
+}
+
+/* ---- Lista de membros (nicklist / sidebar direita) ----
+   Antes sem borda nenhuma; agora com separação clara do chat,
+   cabeçalho destacado e linhas divisórias entre usuários. */
+.kiwi-sidebar {
+    border-left: 1px solid #262626 !important;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25) !important;
+}
+
+.kiwi-nicklist-usercount {
+    background: #141414 !important;
+    border-bottom: 1px solid #262626 !important;
+    padding: 0 14px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    font-size: 0.78rem !important;
+    letter-spacing: 0.06em !important;
+    color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.kiwi-nicklist-user {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+    padding-top: 4px !important;
+    padding-bottom: 10px !important;
+}
+
+.kiwi-nicklist-user:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.kiwi-avatar-inner {
+    border: 2px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Cabeçalho do painel de sidebar (Members / Settings / About tabs) */
+.kiwi-sidebar-options {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.15) !important;
+}
+
+/* No mobile o painel de membros passa a ocupar a tela toda como uma
+   "gaveta", com um cabeçalho de fechar bem visível — evita a sensação
+   de painel flutuando sem contexto sobre o chat. */
+@media (max-width: 769px) {
+    .kiwi-sidebar {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+    .kiwi-sidebar-close {
+        background: rgba(255, 255, 255, 0.08) !important;
+        border-radius: 8px !important;
+    }
+    .kiwi-nicklist-user {
+        padding-top: 8px !important;
+        padding-bottom: 14px !important;
+        line-height: 38px !important;
+    }
+}
 
 /* ================================================================
    IRC TEXT COLOURS

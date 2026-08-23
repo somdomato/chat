@@ -52,11 +52,17 @@ Podman ao encontrar.
 3. **Novas integrações devem ser aditivas e opcionais por padrão.** Siga o
    padrão já usado por Jitsi e pela ponte Telegram: uma stack
    Podman/systemd **separada**, que só é instalada/habilitada se as
-   credenciais necessárias existirem (`when: telegram_bot_token is defined
-   and telegram_chat_id is defined` no playbook), e que nunca aparece nos
-   comandos padrão (`podman compose up`, `./scripts/ansible.sh`) sem opt-in
-   explícito. O objetivo é nunca quebrar o Ergo/KiwiIRC/Gamja/The Lounge que
-   já estão em produção só por causa de uma feature nova.
+   credenciais necessárias existirem **e não estiverem vazias** — veja
+   `matterbridge_enabled` (`set_fact` calculado uma vez no início do bloco
+   "MATTERBRIDGE" em `ansible/playbook.yml`, usado por todas as ~14
+   tasks/handler daquele bloco em vez de repetir `is defined` em cada uma —
+   uma chave presente no vault mas vazia não deve contar como configurada).
+   A stack nunca aparece nos comandos padrão (`podman compose up`,
+   `./scripts/ansible.sh`) sem opt-in explícito. O objetivo é nunca quebrar
+   o Ergo/KiwiIRC/Gamja/The Lounge que já estão em produção só por causa de
+   uma feature nova — inclusive handlers de uma feature opcional devem ser
+   defensivos o bastante para nunca falhar o play inteiro (veja o handler
+   "Reiniciar Matterbridge": confere `stat` da unit antes de reiniciar).
 4. **Valide antes de reportar sucesso:**
    - YAML: `python3 -c "import yaml; yaml.safe_load(open('arquivo.yml'))"`
      (rápido, não requer Ansible instalado nem a senha do vault).
@@ -133,3 +139,10 @@ Pontos a lembrar se for mexer nisso:
   vez de plaintext.
 - Sem `telegram_bot_token`/`telegram_chat_id` no vault, o bloco inteiro do
   playbook é pulado — isso é intencional, não um bug.
+- **Multi-grupo Telegram (bridgear `#somdomato` em mais de um grupo) está
+  documentado mas NÃO implementado** — há blocos comentados como referência
+  em `podman/matterbridge.podman.toml.tmpl` e
+  `ansible/etc/matterbridge/matterbridge.toml.j2`, e o plano completo está em
+  "Bridging para múltiplos grupos" no `docs/TELEGRAM_BRIDGE.md`. Não
+  implemente isso a menos que o usuário peça explicitamente — ele ainda está
+  decidindo quais grupos entram.

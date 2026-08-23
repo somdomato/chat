@@ -25,3 +25,20 @@
     [[gateway.inout]]
     account = "telegram.somdomato"
     channel = "{{ telegram_chat_id }}"
+
+    {# ── Segundo grupo do Telegram (NÃO IMPLEMENTADO — placeholder) ─────────
+       Para espelhar #somdomato em um segundo grupo também: troque
+       telegram_chat_id (string única) por telegram_chat_ids (lista) no
+       vault, e substitua o bloco fixo acima por um loop Jinja2, ex.:
+
+         {% for chat_id in telegram_chat_ids %}
+         [[gateway.inout]]
+         account = "telegram.somdomato"
+         channel = "{{ chat_id }}"
+         {% endfor %}
+
+       Mesmo bot em ambos os grupos funciona sem mudança na conta
+       [telegram.somdomato] acima — só precisa estar adicionado aos dois
+       grupos. Veja "Bridging para múltiplos grupos" em
+       docs/TELEGRAM_BRIDGE.md antes de implementar (envolve mudar
+       group_vars/all.yml, o vault e matterbridge_enabled em playbook.yml). #}

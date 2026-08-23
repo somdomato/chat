@@ -27,3 +27,15 @@
     [[gateway.inout]]
     account = "telegram.somdomato"
     channel = "${TELEGRAM_CHAT_ID}"
+
+    # ── Segundo grupo do Telegram (NÃO IMPLEMENTADO — placeholder) ──────────
+    # Para espelhar #somdomato em um segundo grupo também, descomente e
+    # crie a variável TELEGRAM_CHAT_ID_2 em podman/.env (e no entrypoint, que
+    # hoje só valida/expande TELEGRAM_CHAT_ID). Mesmo bot em ambos os grupos
+    # funciona sem mudança nenhuma na conta [telegram.somdomato] acima — só
+    # adiciona outro [[gateway.inout]] com o chat_id do segundo grupo. Veja
+    # "Bridging para múltiplos grupos" em docs/TELEGRAM_BRIDGE.md.
+    #
+    # [[gateway.inout]]
+    # account = "telegram.somdomato"
+    # channel = "${TELEGRAM_CHAT_ID_2}"
