@@ -113,6 +113,14 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     overflow-x: hidden !important;
 }
 
+/* O KiwiIRC posiciona .kiwi-workspace com position:relative + top:4px,
+   mas mantém height:100% sem descontar esse deslocamento — o offset
+   relativo empurra o conteúdo (barra de mensagem incluída) 4px para
+   baixo do viewport sem reduzir a altura, cortando o fundo da página. */
+.kiwi-workspace {
+    height: calc(100% - 4px) !important;
+}
+
 /* ================================================================
    WELCOME SCREEN — Wood Background + Glass Card
    ================================================================ */
@@ -136,13 +144,14 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     height: 100% !important;
     padding: 24px !important;
     box-sizing: border-box !important;
-    /* wood.jpg é uma textura repetível (1000x667px); um tile pequeno em
-       background-repeat evita o efeito "gigante/borrado" de usar `cover`
-       esticando a imagem inteira na tela. 260x174 mantém a proporção 3:2. */
+    /* wood.webp tem um gradiente de luz próprio (mais claro num canto),
+       então repeti-la em tile (background-repeat) cria emendas visíveis
+       onde o gradiente "quebra" a cada repetição. Usamos a imagem inteira,
+       sem repetir, cobrindo a área — sem emendas. */
     background-image: url('../../img/wood.webp') !important;
-    background-size: 260px 174px !important;
+    background-size: cover !important;
     background-position: center !important;
-    background-repeat: repeat !important;
+    background-repeat: no-repeat !important;
     position: relative !important;
     overflow: hidden !important;
 }
@@ -451,7 +460,7 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start { color: #fff; 
     background: rgba(255, 255, 255, 0.05) !important;
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
     border-radius: 8px !important;
-    margin: 6px 8px !important;
+    margin: 5px 8px !important;
     transition: border-color 0.15s ease, background 0.15s ease !important;
 }
 
@@ -460,11 +469,41 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start { color: #fff; 
     background: rgba(255, 255, 255, 0.07) !important;
 }
 
-.kiwi-controlinput-input {
-    color: var(--brand-default-fg) !important;
+/* .kiwi-controlinput-inner é uma flex row cuja altura, por padrão
+   (align-items:stretch implícito), acompanha o maior filho — o rótulo
+   do nick (.kiwi-controlinput-user) tem line-height:40px fixo no CSS
+   base do KiwiIRC, então a barra inteira ficava ~48px mesmo com o
+   campo de texto vazio. align-items:flex-end libera cada filho para
+   ter sua própria altura (alinhados pela base) e min-height garante
+   um piso decente mesmo quando o campo de texto está bem baixo. */
+.kiwi-controlinput-inner {
+    height: auto !important;
+    min-height: 32px !important;
+    align-items: flex-end !important;
 }
 
-.kiwi-controlinput-input::placeholder {
+/* O campo de mensagem não é um <textarea>: é uma div contenteditable
+   (.kiwi-ircinput-editor) dentro de um wrapper (.kiwi-controlinput-input).
+   O editor herda height:100% do wrapper mas com box-sizing:content-box
+   (padrão do KiwiIRC) — isso soma o padding do editor por cima dos 100%
+   herdados, empurrando a altura real além da caixa visível (o texto
+   "vazava" para fora do balão arredondado). border-box no editor resolve
+   isso; o overflow-y no wrapper mantém o campo rolável se o texto
+   ultrapassar o max-height em várias linhas (continua crescendo até
+   90px antes de rolar). */
+.kiwi-controlinput-input {
+    color: var(--brand-default-fg) !important;
+    max-height: 90px !important;
+    overflow-y: auto !important;
+}
+
+.kiwi-ircinput-editor {
+    box-sizing: border-box !important;
+    line-height: 1.2 !important;
+    padding: 5px 0 !important;
+}
+
+.kiwi-ircinput-editor:empty:not(:focus):before {
     color: rgba(255, 255, 255, 0.35) !important;
 }
 
@@ -531,19 +570,6 @@ button.u-button.u-button-primary.u-submit.kiwi-welcome-znc-start { color: #fff; 
         padding-top: 8px !important;
         padding-bottom: 14px !important;
         line-height: 38px !important;
-    }
-
-    /* O textarea do campo de mensagem cresce via JS conforme o
-       scrollHeight do conteúdo. Como fixamos font-size: 16px nos
-       inputs (para evitar o zoom automático do iOS Safari), a altura
-       de uma única linha ficou desproporcionalmente grande no mobile.
-       max-height limita esse crescimento — o campo continua rolável
-       internamente se o texto ultrapassar algumas linhas. */
-    .kiwi-controlinput-input {
-        max-height: 90px !important;
-        line-height: 1.3 !important;
-        padding-top: 8px !important;
-        padding-bottom: 8px !important;
     }
 }
 

@@ -706,6 +706,7 @@
         rsync_opts:
           - "--no-motd"
           - "-e 'ssh -p {{ ansible_port }}'"
+      tags: [kiwiirc]
 
     - name: Limpar arquivos temporários do KiwiIRC
       ansible.builtin.file:
@@ -1759,6 +1760,7 @@
         owner: root
         group: root
         mode: "0644"
+      tags: [kiwiirc]
 
     - name: Alterar propriedade do diretório kiwiirc
       ansible.builtin.file:

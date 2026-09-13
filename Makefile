@@ -10,7 +10,7 @@ COMPOSE_TG = podman compose -f podman/compose.yml -f podman/compose.telegram.yml
         ergo-restart webircgateway-restart thelounge-restart nginx-restart \
         up-telegram down-telegram build-matterbridge logs-matterbridge \
         matterbridge-shell matterbridge-restart \
-        ps
+        ps deploy-kiwiirc
 
 # ── Ajuda ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +34,26 @@ deploy: ## Sobe (ou atualiza) o ambiente local inteiro: .env + build + up
 	@echo "   Gamja:      http://localhost:9081"
 	@echo "   The Lounge: http://localhost:9082"
 	@echo "   IRC:        localhost:6667"
+
+# ── Deploy VPS (Ansible) ─────────────────────────────────────────────────────
+# Envia só os arquivos do KiwiIRC (temas/static + client.json) para a VPS via
+# Ansible, sem rodar o playbook inteiro (sem baixar Ergo/KiwiIRC/certificados
+# etc). Rápido para iterar em CSS/tema.
+
+ANSIBLE_MACHINE   = ananke
+ANSIBLE_DIR       = ansible
+VAULT_PASS_FILE   = $(ANSIBLE_DIR)/.vault_pass
+
+deploy-kiwiirc: ## Envia apenas os arquivos modificados do KiwiIRC (temas, config) para a VPS
+	@[ -f $(VAULT_PASS_FILE) ] || (echo "❌ $(VAULT_PASS_FILE) não encontrado — veja ansible/README.md" && exit 1)
+	@echo "🚀 Enviando arquivos do KiwiIRC para a VPS ($(ANSIBLE_MACHINE))..."
+	ANSIBLE_CONFIG="$(ANSIBLE_DIR)/ansible.cfg" \
+	ansible-playbook \
+	    --vault-password-file="$(VAULT_PASS_FILE)" \
+	    --inventory="$(ANSIBLE_MACHINE)," \
+	    "$(ANSIBLE_DIR)/playbook.yml" \
+	    --tags kiwiirc \
+	    --diff
 
 # ── Ciclo de vida ────────────────────────────────────────────────────────────
 
