@@ -103,12 +103,24 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     overflow-x: hidden !important;
 }
 
-/* O KiwiIRC posiciona .kiwi-workspace com position:relative + top:4px,
-   mas mantém height:100% sem descontar esse deslocamento — o offset
-   relativo empurra o conteúdo (barra de mensagem incluída) 4px para
-   baixo do viewport sem reduzir a altura, cortando o fundo da página. */
+/* O KiwiIRC posiciona .kiwi-workspace com position:relative + top:4px
+   para abrir espaço a uma faixa de status de 4px (::before = conectado,
+   ::after = desconectado) acima do header. Embutido no site isso aparece
+   como uma margem vazia no topo do chat — zeramos o deslocamento e
+   ocultamos a faixa "conectado". A faixa vermelha de "desconectado"
+   continua, mas sobreposta ao topo do header em vez de empurrar o layout. */
 .kiwi-workspace {
-    height: calc(100% - 4px) !important;
+    top: 0 !important;
+    height: 100% !important;
+}
+.kiwi-workspace::before {
+    display: none !important;
+}
+.kiwi-workspace::after {
+    margin-top: 0 !important;
+    top: 0 !important;
+    height: 3px !important;
+    z-index: 1000 !important;
 }
 
 /* ================================================================
@@ -416,4 +428,99 @@ body, #app, .kiwi-wrap, .kiwi-workspace, .kiwi-container {
     box-sizing: border-box !important;
     line-height: 1.2 !important;
     padding: 5px 0 !important;
+}
+
+/* ================================================================
+   INPUT DE MENSAGEM — acabamento (sobrepõe os ajustes anteriores)
+   Barra com respiro uniforme; nick, campo e botão de emoji com a mesma
+   altura (38px), cantos de 10px e centralizados verticalmente. O tema
+   base (common/base.css) pinta .kiwi-controlinput-tools(-container) com
+   --brand-midtone e dá borda de 2px ao botão — isso criava um "quadrado"
+   em volta do emoji, por isso ambos são zerados aqui (só no modo inline,
+   para não deixar transparente o popup de ferramentas).
+   ================================================================ */
+.kiwi-controlinput {
+    padding: 8px 10px !important;
+    background: #fafafa !important;
+    border-top: 1px solid #ececec !important;
+}
+.kiwi-controlinput-inner {
+    align-items: center !important;
+    gap: 8px !important;
+    min-height: 38px !important;
+}
+.kiwi-controlinput-inner .kiwi-awaystatusindicator {
+    margin: 0 -4px 0 2px !important;
+    align-self: center !important;
+}
+.kiwi-controlinput-user {
+    height: 38px !important;
+    line-height: 38px !important;
+    padding: 0 10px !important;
+    border-radius: 10px !important;
+    background: rgba(0, 0, 0, 0.045) !important;
+    font-size: 0.9rem !important;
+    white-space: nowrap !important;
+    transition: background 0.15s ease !important;
+}
+.kiwi-controlinput-user:hover {
+    background: rgba(0, 0, 0, 0.08) !important;
+}
+.kiwi-controlinput-input-wrap {
+    margin: 0 !important;
+    min-height: 38px !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 0 12px !important;
+    border-radius: 10px !important;
+    background: #ffffff !important;
+    border: 1px solid #e2e2e2 !important;
+    box-sizing: border-box !important;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease !important;
+}
+.kiwi-controlinput--focus .kiwi-controlinput-input-wrap {
+    border-color: var(--brand-primary) !important;
+    background: #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(66, 185, 146, 0.18) !important;
+}
+.kiwi-controlinput-input {
+    width: 100% !important;
+    height: auto !important;
+}
+.kiwi-ircinput-editor {
+    line-height: 20px !important;
+    padding: 8px 0 !important;
+    min-height: 36px !important;
+}
+.kiwi-controlinput-tools,
+.kiwi-controlinput--show-tools--inline .kiwi-controlinput-tools-container,
+.kiwi-controlinput-send-container,
+.kiwi-controlinput-tools-wrapper {
+    height: 38px !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    border: none !important;
+}
+.kiwi-controlinput-button {
+    width: 38px !important;
+    height: 38px !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 10px !important;
+    color: #6b6b6b !important;
+    background: transparent !important;
+    transition: background 0.15s ease, color 0.15s ease !important;
+}
+.kiwi-controlinput-button:hover {
+    color: var(--brand-primary) !important;
+    background: rgba(0, 0, 0, 0.08) !important;
+}
+.kiwi-controlinput-button i {
+    line-height: 38px !important;
+    font-size: 20px !important;
+}
+@media (max-width: 769px) {
+    .kiwi-controlinput { padding: 6px 8px !important; }
+    .kiwi-controlinput-inner { gap: 6px !important; }
 }
